@@ -13,15 +13,16 @@
  * implied. See the License for the specific language governing
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
- */
+*/
 
 package site.ycsb;
 
-import site.ycsb.measurements.Measurements;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.LockSupport;
+
+import site.ycsb.measurements.Measurements;
 
 /**
  * A thread for executing transactions or data inserts to the database.
@@ -44,6 +45,7 @@ public class ClientThread implements Runnable {
   private Properties props;
   private long targetOpsTickNs;
   private final Measurements measurements;
+  private final boolean extend;
 
   /**
    * Constructor.
@@ -55,13 +57,15 @@ public class ClientThread implements Runnable {
    * @param opcount              the number of operations (transactions or inserts) to do
    * @param targetperthreadperms target number of operations per thread per ms
    * @param completeLatch        The latch tracking the completion of all clients.
+   * @param extend               true to extend the number of fields
    */
   public ClientThread(DB db, boolean dotransactions, Workload workload, Properties props, int opcount,
-                      double targetperthreadperms, CountDownLatch completeLatch) {
+                      double targetperthreadperms, CountDownLatch completeLatch, boolean extend) {
     this.db = db;
     this.dotransactions = dotransactions;
     this.workload = workload;
     this.opcount = opcount;
+    this.extend = extend;
     opsdone = 0;
     if (targetperthreadperms > 0) {
       targetOpsPerMs = targetperthreadperms;
@@ -119,7 +123,7 @@ public class ClientThread implements Runnable {
 
         while (((opcount == 0) || (opsdone < opcount)) && !workload.isStopRequested()) {
 
-          if (!workload.doTransaction(db, workloadstate)) {
+          if (!workload.doTransaction(db, workloadstate, this.extend)) {
             break;
           }
 

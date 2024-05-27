@@ -140,6 +140,11 @@ public final class Client {
   public static final String DO_TRANSACTIONS_PROPERTY = "dotransactions";
 
   /**
+   * Whether or not this is the value extension happens or not.
+   */
+  public static final String EXTEND_PROPERTY = "extend";
+
+  /**
    * Whether or not to show status during run.
    */
   public static final String STATUS_PROPERTY = "status";
@@ -439,8 +444,17 @@ public final class Client {
           ++threadopcount;
         }
 
+        // Include the variable to indicate whether the extension operation to perform
+        if("1".equals(props.getProperty("extendproportion"))){
+          props.setProperty(EXTEND_PROPERTY, String.valueOf(true));
+        }else {
+          props.setProperty(EXTEND_PROPERTY, String.valueOf(false));
+        }
+        
+        boolean extend = Boolean.valueOf(props.getProperty(EXTEND_PROPERTY, String.valueOf(true)));
+
         ClientThread t = new ClientThread(db, dotransactions, workload, props, threadopcount, targetperthreadperms,
-            completeLatch);
+            completeLatch, extend);
         t.setThreadId(threadid);
         t.setThreadCount(threadcount);
         clients.add(t);

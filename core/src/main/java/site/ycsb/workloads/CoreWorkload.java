@@ -653,10 +653,13 @@ public class CoreWorkload extends Workload {
    * have no side effects other than DB operations.
    */
   @Override
-  public boolean doTransaction(DB db, Object threadstate) {
+  public boolean doTransaction(DB db, Object threadstate, boolean extend) {
     String operation = operationchooser.nextString();
     if(operation == null) {
       return false;
+    }
+    if (extend) {
+      operation = "EXTEND";
     }
 
     switch (operation) {
@@ -665,6 +668,9 @@ public class CoreWorkload extends Workload {
       break;
     case "UPDATE":
       doTransactionUpdate(db);
+      break;
+    case "EXTEND":
+      doTransactionExtend(db);
       break;
     case "INSERT":
       doTransactionInsert(db);
@@ -832,6 +838,25 @@ public class CoreWorkload extends Workload {
     }
 
     db.update(table, keyname, values);
+  }
+
+  public void doTransactionExtend(DB db) {
+    // choose a random key
+    long keynum = nextKeynum();
+
+    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
+
+    HashMap<String, ByteIterator> values;
+
+    if (writeallfields) {
+      // new data for all the fields
+      values = buildValues(keyname);
+    } else {
+      // update a random field
+      values = buildSingleValue(keyname);
+    }
+
+    db.extend(table, keyname, values);
   }
 
   public void doTransactionInsert(DB db) {

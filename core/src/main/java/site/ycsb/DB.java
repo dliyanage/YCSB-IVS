@@ -114,6 +114,16 @@ public abstract class DB {
   public abstract Status update(String table, String key, Map<String, ByteIterator> values);
 
   /**
+   * Extend fields in the database.
+   *
+   * @param table The name of the table
+   * @param key The record key of the record to write.
+   * @param values A HashMap of field/value pairs to update in the record
+   * @return The result of the operation.
+   */
+  public abstract Status extend(String table, String key, Map<String, ByteIterator> values);
+
+  /**
    * Insert a record in the database. Any field/value pairs in the specified values HashMap will be written into the
    * record with the specified record key.
    *

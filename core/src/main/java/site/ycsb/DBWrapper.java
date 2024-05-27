@@ -250,4 +250,10 @@ public class DBWrapper extends DB {
       return res;
     }
   }
+
+  @Override
+  public Status extend(String table, String key, Map<String, ByteIterator> values) {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'extend'");
+  }
 }
