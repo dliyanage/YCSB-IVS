@@ -17,6 +17,7 @@
 
 package site.ycsb;
 
+//import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
@@ -123,7 +124,7 @@ public class ClientThread implements Runnable {
 
         while (((opcount == 0) || (opsdone < opcount)) && !workload.isStopRequested()) {
 
-          if (!workload.doTransaction(db, workloadstate, this.extend)) {
+          if (!workload.doTransaction(db, workloadstate)) {
             break;
           }
 

@@ -308,13 +308,24 @@ public final class Client {
 
     final Tracer tracer = getTracer(props, workload);
 
-    initWorkload(props, warningthread, workload, tracer);
+    // Include the variable to indicate whether the extension operation to perform
+    double extendproportion = Double.parseDouble(props.getProperty("extendproportion"));
+
+    if(extendproportion > 0){
+      props.setProperty(EXTEND_PROPERTY, String.valueOf(true));
+    }else {
+      props.setProperty(EXTEND_PROPERTY, String.valueOf(false));
+    }
+
+    boolean extend = Boolean.valueOf(props.getProperty(EXTEND_PROPERTY, String.valueOf(true)));
+
+    initWorkload(props, warningthread, workload, tracer, extend);
 
     System.err.println("Starting test.");
     final CountDownLatch completeLatch = new CountDownLatch(threadcount);
 
     final List<ClientThread> clients = initDb(dbname, props, threadcount, targetperthreadperms,
-        workload, tracer, completeLatch);
+        workload, tracer, completeLatch, extend);
 
     if (status) {
       boolean standardstatus = false;
@@ -407,7 +418,7 @@ public final class Client {
 
   private static List<ClientThread> initDb(String dbname, Properties props, int threadcount,
                                            double targetperthreadperms, Workload workload, Tracer tracer,
-                                           CountDownLatch completeLatch) {
+                                           CountDownLatch completeLatch, boolean extend) {
     boolean initFailed = false;
     boolean dotransactions = Boolean.valueOf(props.getProperty(DO_TRANSACTIONS_PROPERTY, String.valueOf(true)));
 
@@ -444,15 +455,6 @@ public final class Client {
           ++threadopcount;
         }
 
-        // Include the variable to indicate whether the extension operation to perform
-        if("1".equals(props.getProperty("extendproportion"))){
-          props.setProperty(EXTEND_PROPERTY, String.valueOf(true));
-        }else {
-          props.setProperty(EXTEND_PROPERTY, String.valueOf(false));
-        }
-        
-        boolean extend = Boolean.valueOf(props.getProperty(EXTEND_PROPERTY, String.valueOf(true)));
-
         ClientThread t = new ClientThread(db, dotransactions, workload, props, threadopcount, targetperthreadperms,
             completeLatch, extend);
         t.setThreadId(threadid);
@@ -474,10 +476,14 @@ public final class Client {
         .build();
   }
 
-  private static void initWorkload(Properties props, Thread warningthread, Workload workload, Tracer tracer) {
+  private static void initWorkload(Properties props, Thread warningthread, Workload workload, 
+        Tracer tracer, boolean extend) {
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_INIT_SPAN)) {
         workload.init(props);
+        if (extend) {
+          workload.initExtend(props);
+        }
         warningthread.interrupt();
       }
     } catch (WorkloadException e) {

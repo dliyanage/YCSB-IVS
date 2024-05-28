@@ -251,9 +251,25 @@ public class DBWrapper extends DB {
     }
   }
 
+  /**
+   * Update a record in the database. Any field/value pairs in the specified values HashMap will be written into the
+   * record with the specified record key, overwriting any existing values with the same field name.
+   *
+   * @param table The name of the table
+   * @param key The record key of the record to write.
+   * @param values A HashMap of field/value pairs to update in the record
+   * @return The result of the operation.
+   */
   @Override
   public Status extend(String table, String key, Map<String, ByteIterator> values) {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'extend'");
+    try (final TraceScope span = tracer.newScope(scopeStringInsert)) {
+      long ist = measurements.getIntendedStartTimeNs();
+      long st = System.nanoTime();
+      Status res = db.update(table, key, values);
+      long en = System.nanoTime();
+      measure("EXTEND", res, ist, st, en);
+      measurements.reportStatus("EXTEND", res);
+      return res;
+    }
   }
 }
