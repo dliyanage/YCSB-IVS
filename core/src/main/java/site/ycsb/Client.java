@@ -17,21 +17,27 @@
 
 package site.ycsb;
 
-import site.ycsb.measurements.Measurements;
-import site.ycsb.measurements.exporter.MeasurementsExporter;
-import site.ycsb.measurements.exporter.TextMeasurementsExporter;
-import org.apache.htrace.core.HTraceConfiguration;
-import org.apache.htrace.core.TraceScope;
-import org.apache.htrace.core.Tracer;
-
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.htrace.core.HTraceConfiguration;
+import org.apache.htrace.core.TraceScope;
+import org.apache.htrace.core.Tracer;
+
+import site.ycsb.measurements.Measurements;
+import site.ycsb.measurements.exporter.MeasurementsExporter;
+import site.ycsb.measurements.exporter.TextMeasurementsExporter;
 
 /**
  * Turn seconds remaining into more useful units.
@@ -319,7 +325,7 @@ public final class Client {
 
     boolean extend = Boolean.valueOf(props.getProperty(EXTEND_PROPERTY, String.valueOf(true)));
 
-    initWorkload(props, warningthread, workload, tracer, extend);
+    initWorkload(props, warningthread, workload, tracer);
 
     System.err.println("Starting test.");
     final CountDownLatch completeLatch = new CountDownLatch(threadcount);
@@ -477,13 +483,10 @@ public final class Client {
   }
 
   private static void initWorkload(Properties props, Thread warningthread, Workload workload, 
-        Tracer tracer, boolean extend) {
+        Tracer tracer) {
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_INIT_SPAN)) {
         workload.init(props);
-        if (extend) {
-          workload.initExtend(props);
-        }
         warningthread.interrupt();
       }
     } catch (WorkloadException e) {

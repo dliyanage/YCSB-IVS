@@ -119,6 +119,16 @@ public class CoreWorkload extends Workload {
   public static final String FIELD_LENGTH_PROPERTY_DEFAULT = "100";
 
   /**
+   * The name of the property for the length of a field in bytes.
+   */
+  public static final String EXTEND_FIELD_LENGTH_PROPERTY = "extendvaluesize";
+
+  /**
+   * The default maximum length of a field in bytes.
+   */
+  public static final String EXTEND_FIELD_LENGTH_PROPERTY_DEFAULT = "100";
+
+  /**
    * The name of the property for the minimum length of a field in bytes.
    */
   public static final String MIN_FIELD_LENGTH_PROPERTY = "minfieldlength";
@@ -404,12 +414,14 @@ public class CoreWorkload extends Workload {
         FIELD_LENGTH_DISTRIBUTION_PROPERTY, FIELD_LENGTH_DISTRIBUTION_PROPERTY_DEFAULT);
     int fieldlength =
         Integer.parseInt(p.getProperty(FIELD_LENGTH_PROPERTY, FIELD_LENGTH_PROPERTY_DEFAULT));
+    int extendfieldlength =
+        Integer.parseInt(p.getProperty(EXTEND_FIELD_LENGTH_PROPERTY, EXTEND_FIELD_LENGTH_PROPERTY_DEFAULT));
     int minfieldlength =
         Integer.parseInt(p.getProperty(MIN_FIELD_LENGTH_PROPERTY, MIN_FIELD_LENGTH_PROPERTY_DEFAULT));
     String fieldlengthhistogram = p.getProperty(
         FIELD_LENGTH_HISTOGRAM_FILE_PROPERTY, FIELD_LENGTH_HISTOGRAM_FILE_PROPERTY_DEFAULT);
     if (fieldlengthdistribution.compareTo("constant") == 0) {
-      fieldlengthgenerator = new ConstantIntegerGenerator(fieldlength);
+      fieldlengthgenerator = new ConstantIntegerGenerator(fieldlength+extendfieldlength);
     } else if (fieldlengthdistribution.compareTo("uniform") == 0) {
       fieldlengthgenerator = new UniformLongGenerator(minfieldlength, fieldlength);
     } else if (fieldlengthdistribution.compareTo("zipfian") == 0) {
@@ -894,9 +906,14 @@ public class CoreWorkload extends Workload {
     String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
 
     HashMap<String, ByteIterator> values;
-
-    // new data for all the fields. after extending the number of fields
-    values = buildValuesExtend(keyname);
+    
+    if (writeallfields) {
+      // new data for all the fields
+      values = buildValues(keyname);
+    } else {
+      // update a random field
+      values = buildSingleValue(keyname);
+    }
     
     db.extend(table, keyname, values);
   }
