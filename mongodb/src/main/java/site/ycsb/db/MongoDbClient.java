@@ -47,6 +47,7 @@ import org.bson.Document;
 import org.bson.types.Binary;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -257,7 +258,7 @@ public class MongoDbClient extends DB {
       MongoCollection<Document> collection = database.getCollection(table);
       Document toInsert = new Document("_id", key);
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        toInsert.put(entry.getKey(), entry.getValue().toArray());
+        toInsert.put(entry.getKey(), entry.getValue().toString());
       }
 
       if (batchSize == 1) {
@@ -436,7 +437,7 @@ public class MongoDbClient extends DB {
       Document query = new Document("_id", key);
       Document fieldsToSet = new Document();
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        fieldsToSet.put(entry.getKey(), entry.getValue().toArray());
+        fieldsToSet.put(entry.getKey(), entry.getValue().toString());
       }
       Document update = new Document("$set", fieldsToSet);
 
@@ -452,6 +453,45 @@ public class MongoDbClient extends DB {
     }
   }
 
+  /**
+   * Extend a record in the database. Any field/value pairs in the specified
+   * values HashMap will be appended into the record with the specified record
+   * key, extending any existing values with the same field name.
+   * 
+   * @param table
+   *          The name of the table
+   * @param key
+   *          The record key of the record to write.
+   * @param values
+   *          A HashMap of field/value pairs to append in the record
+   * @return Zero on success, a non-zero error code on error. See this class's
+   *         description for a discussion of error codes.
+   */
+  @Override
+  public Status extend(String table, String key,
+      Map<String, ByteIterator> values) {
+    try {
+      MongoCollection<Document> collection = database.getCollection(table);
+
+      Document query = new Document("_id", key);
+      Document fieldsToSet = new Document();
+      for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
+        fieldsToSet.put(entry.getKey(), new Document("$concat",
+            Arrays.asList("$" + entry.getKey(), new Document("$literal", entry.getValue().toString()))));
+      }
+      Document update = new Document("$set", fieldsToSet);
+
+      UpdateResult result = collection.updateOne(query, Arrays.asList(update));
+      if (result.wasAcknowledged() && result.getMatchedCount() == 0) {
+        System.err.println("Nothing updated for key " + key);
+        return Status.NOT_FOUND;
+      }
+      return Status.OK;
+    } catch (Exception e) {
+      System.err.println(e.toString());
+      return Status.ERROR;
+    }
+  }
   /**
    * Fills the map with the values from the DBObject.
    * 

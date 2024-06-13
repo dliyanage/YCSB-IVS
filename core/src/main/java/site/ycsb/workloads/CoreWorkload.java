@@ -19,7 +19,6 @@ package site.ycsb.workloads;
 
 import site.ycsb.*;
 import site.ycsb.generator.*;
-import site.ycsb.generator.UniformLongGenerator;
 import site.ycsb.measurements.Measurements;
 
 import java.io.IOException;
@@ -249,6 +248,16 @@ public class CoreWorkload extends Workload {
    * The default proportion of transactions that are scans.
    */
   public static final String READMODIFYWRITE_PROPORTION_PROPERTY_DEFAULT = "0.0";
+
+  /**
+   * The name of the property for the proportion of transactions that are value-extending updates.
+   */
+  public static final String EXTEND_PROPORTION_PROPERTY = "extendproportion";
+
+  /**
+   * The default proportion of transactions that are updates.
+   */
+  public static final String EXTEND_PROPORTION_PROPERTY_DEFAULT = "0.00";
 
   /**
    * The name of the property for the the distribution of requests across the keyspace. Options are
@@ -672,8 +681,14 @@ public class CoreWorkload extends Workload {
     case "SCAN":
       doTransactionScan(db);
       break;
-    default:
+    case "READMODIFYWRITE":
       doTransactionReadModifyWrite(db);
+      break;
+    case "EXTEND":
+      doTransactionExtend(db);
+      break;
+    default:
+      return false;
     }
 
     return true;
@@ -848,6 +863,25 @@ public class CoreWorkload extends Workload {
     }
   }
 
+  public void doTransactionExtend(DB db) {
+    // choose a random key
+    long keynum = nextKeynum();
+
+    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
+
+    HashMap<String, ByteIterator> values;
+
+    if (writeallfields) {
+      // new data for all the fields
+      values = buildValues(keyname);
+    } else {
+      // update a random field
+      values = buildSingleValue(keyname);
+    }
+
+    db.extend(table, keyname, values);
+  }
+
   /**
    * Creates a weighted discrete values with database operations for a workload to perform.
    * Weights/proportions are read from the properties list and defaults are used
@@ -872,6 +906,8 @@ public class CoreWorkload extends Workload {
         p.getProperty(SCAN_PROPORTION_PROPERTY, SCAN_PROPORTION_PROPERTY_DEFAULT));
     final double readmodifywriteproportion = Double.parseDouble(p.getProperty(
         READMODIFYWRITE_PROPORTION_PROPERTY, READMODIFYWRITE_PROPORTION_PROPERTY_DEFAULT));
+    final double extendproportion = Double.parseDouble(
+        p.getProperty(EXTEND_PROPORTION_PROPERTY, EXTEND_PROPORTION_PROPERTY_DEFAULT));
 
     final DiscreteGenerator operationchooser = new DiscreteGenerator();
     if (readproportion > 0) {
@@ -892,6 +928,10 @@ public class CoreWorkload extends Workload {
 
     if (readmodifywriteproportion > 0) {
       operationchooser.addValue(readmodifywriteproportion, "READMODIFYWRITE");
+    }
+
+    if (extendproportion > 0) {
+      operationchooser.addValue(extendproportion, "EXTEND");
     }
     return operationchooser;
   }

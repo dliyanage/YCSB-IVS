@@ -47,6 +47,7 @@ public class DBWrapper extends DB {
 
   private final String scopeStringCleanup;
   private final String scopeStringDelete;
+  private final String scopeStringExtend;
   private final String scopeStringInit;
   private final String scopeStringInsert;
   private final String scopeStringRead;
@@ -60,6 +61,7 @@ public class DBWrapper extends DB {
     final String simple = db.getClass().getSimpleName();
     scopeStringCleanup = simple + "#cleanup";
     scopeStringDelete = simple + "#delete";
+    scopeStringExtend = simple + "#extend";
     scopeStringInit = simple + "#init";
     scopeStringInsert = simple + "#insert";
     scopeStringRead = simple + "#read";
@@ -247,6 +249,28 @@ public class DBWrapper extends DB {
       long en = System.nanoTime();
       measure("DELETE", res, ist, st, en);
       measurements.reportStatus("DELETE", res);
+      return res;
+    }
+  }
+
+  /**
+   * Extend a record in the database. Any field/value pairs in the specified values HashMap will be appended to the
+   * record with the specified record key, extending any existing values with the same field name.
+   *
+   * @param table The name of the table
+   * @param key The record key of the record to write.
+   * @param values A HashMap of field/value pairs to update in the record
+   * @return The result of the operation.
+   */
+  public Status extend(String table, String key,
+                       Map<String, ByteIterator> values) {
+    try (final TraceScope span = tracer.newScope(scopeStringExtend)) {
+      long ist = measurements.getIntendedStartTimeNs();
+      long st = System.nanoTime();
+      Status res = db.extend(table, key, values);
+      long en = System.nanoTime();
+      measure("EXTEND", res, ist, st, en);
+      measurements.reportStatus("EXTEND", res);
       return res;
     }
   }

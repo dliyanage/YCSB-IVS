@@ -132,4 +132,28 @@ public abstract class DB {
    * @return The result of the operation.
    */
   public abstract Status delete(String table, String key);
+
+  /**
+   * Update a record in the database by appending all field/value pairs in the specified values HashMap to the
+   * record with the specified record key, extending any existing values with the same field name.
+   *
+   * @param table The name of the table
+   * @param key The record key of the record to write.
+   * @param values A HashMap of field/value pairs to update in the record
+   * @return The result of the operation.
+   */
+  public Status extend(String table, String key, Map<String, ByteIterator> values) {
+    HashMap<String, ByteIterator> result = new HashMap<String, ByteIterator>();
+    Set<String> fields = values.keySet();
+
+    Status status = read(table, key, fields, result);
+    if (status == Status.OK) {
+      for (String fieldkey : fields) {
+        result.put(fieldkey, new StringByteIterator(result.get(fieldkey).toString() + values.get(fieldkey).toString()));
+      }
+      status = update(table, key, result);
+    }
+
+    return status;
+  }
 }
