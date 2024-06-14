@@ -265,7 +265,7 @@ public class DBWrapper extends DB {
     try (final TraceScope span = tracer.newScope(scopeStringInsert)) {
       long ist = measurements.getIntendedStartTimeNs();
       long st = System.nanoTime();
-      Status res = db.update(table, key, values);
+      Status res = db.extend(table, key, values);
       long en = System.nanoTime();
       measure("EXTEND", res, ist, st, en);
       measurements.reportStatus("EXTEND", res);

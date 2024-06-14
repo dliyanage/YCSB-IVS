@@ -433,9 +433,6 @@ public final class Client {
       int opcount;
       if (dotransactions) {
         opcount = Integer.parseInt(props.getProperty(OPERATION_COUNT_PROPERTY, "0"));
-        if (extend) {
-          opcount = (int) (opcount * Double.parseDouble(props.getProperty("extendproportion"))); 
-        }
       } else {
         if (props.containsKey(INSERT_COUNT_PROPERTY)) {
           opcount = Integer.parseInt(props.getProperty(INSERT_COUNT_PROPERTY, "0"));
