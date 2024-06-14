@@ -32,7 +32,6 @@ repeat_non_zero = function(column) {
 
 data = data %>%
   select(-Insertprop) %>%
-  mutate(Extendvaluesize = repeat_non_zero(Extendvaluesize)) %>%
   mutate(Extendprop = repeat_non_zero(Extendprop))
   
 # Latency for READ
@@ -40,14 +39,13 @@ READ_data = data %>%
               filter(Phase=="run",Operation=="READ")
               
 # Plot average latency (us)  
-ggplot(READ_data, aes(x = Extendprop, y = Extendvaluesize, fill = AverageLatency.us.)) +
-  geom_tile() +
-  scale_fill_gradient(low = "yellow", high = "purple") +
-  geom_text(aes(label = sprintf("%.2f", AverageLatency.us.)), size = 3, color = "black") +
+ggplot(READ_data, aes(x = Epoch, y = AverageLatency.us.)) +
+  geom_point() +
+  geom_line() +
   labs(
-    title = "Heatmap of Average Latency for READ",
-    x = "Extendprop",
-    y = "Extendvaluesize",
+    title = "Average Latency for READ",
+    x = "Epoch",
+    y = "Average Latency (us)",
     fill = "Avg Latency (us)"
   ) +
   theme_minimal() +
