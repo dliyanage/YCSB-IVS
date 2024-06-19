@@ -7,7 +7,7 @@ OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./analysis/all_experiments.csv"
+OUTPUT_FILE="./all_experiments_1.csv"
 
 # Extend phase experiment parameters
 extendproportion_extend="1"
@@ -37,10 +37,11 @@ write_result() {
     local first="$1"
     # Remove rows not starting with specific operations and filter specific operations
     filtered_output=$(awk '/^\[(INSERT|READ|UPDATE|SCAN|EXTEND)\]/' "$INPUT_FILE")
+    overall_output=$(awk '/^\[(OVERALL)\]/' "$INPUT_FILE")
 
     if [ "$first" == "TRUE" ]; then   
         # Extract unique second values (except the first one) and create header
-        header="Epoch,Phase,Recordcount,Readallfields,Requestdist,Operation,Readprop,Updateprop,Scanprop,Insertprop,Extendprop,$(awk '{print $2}' <<< "$filtered_output" | sed 's/,$//' | uniq | awk '{ORS=","; print}')"
+        header="Epoch,Phase,Recordcount,Readallfields,Requestdist,Operation,Readprop,Updateprop,Scanprop,Insertprop,Extendprop,Runtime(ms),Throughput(ops/sec),$(awk '{print $2}' <<< "$filtered_output" | sed 's/,$//' | uniq | awk '{ORS=","; print}')"
         echo "$header" > "$OUTPUT_FILE"
     fi
 
@@ -52,9 +53,17 @@ write_result() {
         # Extract operation and third value
         operation=$(echo "$line" | awk '{print $1}' | sed 's/,$//' | tr -d '[]')
         third_value=$(echo "$line" | awk '{print $3}' | sed 's/,$//')
+        
+        run_specific=()
+        # Extract throughput
+        while IFS= read -r line; do
+            # Extract operation and third value
+            tmp=$(echo "$line" | awk '{print $3}' | sed 's/,$//')
+            run_specific+=("$tmp")
+        done <<< "$overall_output"    
         # Append to the values variable
         if [ $k -eq 1 ]; then
-            values="$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,$third_value"
+            values="$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
             k=$((k+1))
             prev_operation="$operation"
         else
@@ -63,7 +72,7 @@ write_result() {
         if [ "$prev_operation" != "$operation" ]; then
             # Print the values to the output file
             echo "$values" >> "$OUTPUT_FILE"
-            values="$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,$third_value"
+            values="$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
             prev_operation="$operation"
         fi
     done <<< "$filtered_output"
