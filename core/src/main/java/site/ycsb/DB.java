@@ -114,6 +114,29 @@ public abstract class DB {
   public abstract Status update(String table, String key, Map<String, ByteIterator> values);
 
   /**
+   * Extend fields in the database.
+   *
+   * @param table The name of the table
+   * @param key The record key of the record to write.
+   * @param values A HashMap of field/value pairs to update in the record
+   * @return The result of the operation.
+   */
+  public Status extend(String table, String key, Map<String, ByteIterator> values) {
+    HashMap<String, ByteIterator> result = new HashMap<String, ByteIterator>();
+    Set<String> fields = values.keySet();
+
+    Status status = read(table, key, fields, result);
+    if (status == Status.OK) {
+      for (String fieldkey : fields) {
+        result.put(fieldkey, new StringByteIterator(result.get(fieldkey).toString() + values.get(fieldkey).toString()));
+      }
+      status = update(table, key, result);
+    }
+
+    return status;
+  }
+
+  /**
    * Insert a record in the database. Any field/value pairs in the specified values HashMap will be written into the
    * record with the specified record key.
    *

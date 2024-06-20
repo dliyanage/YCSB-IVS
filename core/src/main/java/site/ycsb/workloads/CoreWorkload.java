@@ -19,7 +19,6 @@ package site.ycsb.workloads;
 
 import site.ycsb.*;
 import site.ycsb.generator.*;
-import site.ycsb.generator.UniformLongGenerator;
 import site.ycsb.measurements.Measurements;
 
 import java.io.IOException;
@@ -40,6 +39,7 @@ import java.util.*;
  * one (false) (default: false)
  * <LI><b>readproportion</b>: what proportion of operations should be reads (default: 0.95)
  * <LI><b>updateproportion</b>: what proportion of operations should be updates (default: 0.05)
+ * <LI><b>extendproportion</b>: what proportion of operations should be extends (default: 0.0)
  * <LI><b>insertproportion</b>: what proportion of operations should be inserts (default: 0)
  * <LI><b>scanproportion</b>: what proportion of operations should be scans (default: 0)
  * <LI><b>readmodifywriteproportion</b>: what proportion of operations should be read a record,
@@ -89,6 +89,9 @@ public class CoreWorkload extends Workload {
   public static final String FIELD_COUNT_PROPERTY_DEFAULT = "10";
   
   private List<String> fieldnames;
+
+  // Field names list for extending the data fields
+  private List<String> extendfieldnames;
 
   /**
    * The name of the property for the field length distribution. Options are "uniform", "zipfian"
@@ -211,14 +214,24 @@ public class CoreWorkload extends Workload {
   public static final String READ_PROPORTION_PROPERTY_DEFAULT = "0.95";
 
   /**
-   * The name of the property for the proportion of transactions that are updates.
+   * The name of the property for the proportion of transactions that are extends.
    */
   public static final String UPDATE_PROPORTION_PROPERTY = "updateproportion";
+
+  /**
+   * The name of the property for the proportion of transactions that are updates.
+   */
+  public static final String EXTEND_PROPORTION_PROPERTY = "extendproportion";
 
   /**
    * The default proportion of transactions that are updates.
    */
   public static final String UPDATE_PROPORTION_PROPERTY_DEFAULT = "0.05";
+
+  /**
+   * The default proportion of transactions that are extends.
+   */
+  public static final String EXTEND_PROPORTION_PROPERTY_DEFAULT = "0.0";
 
   /**
    * The name of the property for the proportion of transactions that are inserts.
@@ -370,6 +383,7 @@ public class CoreWorkload extends Workload {
   protected int insertionRetryInterval;
 
   private Measurements measurements = Measurements.getMeasurements();
+  private long extendfieldcount;
 
   public static String buildKeyName(long keynum, int zeropadding, boolean orderedinserts) {
     if (!orderedinserts) {
@@ -548,11 +562,28 @@ public class CoreWorkload extends Workload {
   }
 
   /**
+   * Initialize the fields for Extend method.
+   * Called once, in the main client thread, before any operations are started.
+   */
+  @Override
+  public void initExtend(Properties p) throws WorkloadException {
+    extendfieldnames = new ArrayList<>();
+    extendfieldcount = fieldcount + Long.parseLong(p.getProperty(FIELD_COUNT_PROPERTY, 
+    FIELD_COUNT_PROPERTY_DEFAULT));
+    final String fieldnameprefix = FIELD_NAME_PREFIX_DEFAULT;
+    for (int i = (int)fieldcount; i < extendfieldcount; i++) {
+      extendfieldnames.add(fieldnameprefix + i);
+    }
+    fieldnames.addAll(extendfieldnames); 
+    fieldcount = extendfieldcount;
+  }
+
+  /**
    * Builds a value for a randomly chosen field.
    */
   private HashMap<String, ByteIterator> buildSingleValue(String key) {
     HashMap<String, ByteIterator> value = new HashMap<>();
-
+    
     String fieldkey = fieldnames.get(fieldchooser.nextValue().intValue());
     ByteIterator data;
     if (dataintegrity) {
@@ -573,6 +604,25 @@ public class CoreWorkload extends Workload {
     HashMap<String, ByteIterator> values = new HashMap<>();
 
     for (String fieldkey : fieldnames) {
+      ByteIterator data;
+      if (dataintegrity) {
+        data = new StringByteIterator(buildDeterministicValue(key, fieldkey));
+      } else {
+        // fill with random data
+        data = new RandomByteIterator(fieldlengthgenerator.nextValue().longValue());
+      }
+      values.put(fieldkey, data);
+    }
+    return values;
+  }
+
+  /**
+   * Builds values for all fields while extending.
+   */
+  private HashMap<String, ByteIterator> buildValuesExtend(String key) {
+    HashMap<String, ByteIterator> values = new HashMap<>();
+
+    for (String fieldkey : extendfieldnames) {
       ByteIterator data;
       if (dataintegrity) {
         data = new StringByteIterator(buildDeterministicValue(key, fieldkey));
@@ -665,6 +715,9 @@ public class CoreWorkload extends Workload {
       break;
     case "UPDATE":
       doTransactionUpdate(db);
+      break;
+    case "EXTEND":
+      doTransactionExtend(db);
       break;
     case "INSERT":
       doTransactionInsert(db);
@@ -834,6 +887,25 @@ public class CoreWorkload extends Workload {
     db.update(table, keyname, values);
   }
 
+  public void doTransactionExtend(DB db) {
+    // choose a random key
+    long keynum = nextKeynum();
+
+    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
+
+    HashMap<String, ByteIterator> values;
+    
+    if (writeallfields) {
+      // new data for all the fields
+      values = buildValues(keyname);
+    } else {
+      // update a random field
+      values = buildSingleValue(keyname);
+    }
+    
+    db.extend(table, keyname, values);
+  }
+
   public void doTransactionInsert(DB db) {
     // choose the next key
     long keynum = transactioninsertkeysequence.nextValue();
@@ -866,6 +938,8 @@ public class CoreWorkload extends Workload {
         p.getProperty(READ_PROPORTION_PROPERTY, READ_PROPORTION_PROPERTY_DEFAULT));
     final double updateproportion = Double.parseDouble(
         p.getProperty(UPDATE_PROPORTION_PROPERTY, UPDATE_PROPORTION_PROPERTY_DEFAULT));
+    final double extendproportion = Double.parseDouble(
+        p.getProperty(EXTEND_PROPORTION_PROPERTY, EXTEND_PROPORTION_PROPERTY_DEFAULT));
     final double insertproportion = Double.parseDouble(
         p.getProperty(INSERT_PROPORTION_PROPERTY, INSERT_PROPORTION_PROPERTY_DEFAULT));
     final double scanproportion = Double.parseDouble(
@@ -880,6 +954,10 @@ public class CoreWorkload extends Workload {
 
     if (updateproportion > 0) {
       operationchooser.addValue(updateproportion, "UPDATE");
+    }
+
+    if (extendproportion > 0) {
+      operationchooser.addValue(extendproportion, "EXTEND");
     }
 
     if (insertproportion > 0) {

@@ -17,21 +17,27 @@
 
 package site.ycsb;
 
-import site.ycsb.measurements.Measurements;
-import site.ycsb.measurements.exporter.MeasurementsExporter;
-import site.ycsb.measurements.exporter.TextMeasurementsExporter;
-import org.apache.htrace.core.HTraceConfiguration;
-import org.apache.htrace.core.TraceScope;
-import org.apache.htrace.core.Tracer;
-
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.htrace.core.HTraceConfiguration;
+import org.apache.htrace.core.TraceScope;
+import org.apache.htrace.core.Tracer;
+
+import site.ycsb.measurements.Measurements;
+import site.ycsb.measurements.exporter.MeasurementsExporter;
+import site.ycsb.measurements.exporter.TextMeasurementsExporter;
 
 /**
  * Turn seconds remaining into more useful units.
@@ -138,6 +144,11 @@ public final class Client {
    * Whether or not this is the transaction phase (run) or not (load).
    */
   public static final String DO_TRANSACTIONS_PROPERTY = "dotransactions";
+
+  /**
+   * Whether or not this is the value extension happens or not.
+   */
+  public static final String EXTEND_PROPERTY = "extend";
 
   /**
    * Whether or not to show status during run.
@@ -303,13 +314,24 @@ public final class Client {
 
     final Tracer tracer = getTracer(props, workload);
 
+    // Include the variable to indicate whether the extension operation to perform
+    double extendproportion = Double.parseDouble(props.getProperty("extendproportion"));
+
+    if(extendproportion > 0){
+      props.setProperty(EXTEND_PROPERTY, String.valueOf(true));
+    }else {
+      props.setProperty(EXTEND_PROPERTY, String.valueOf(false));
+    }
+
+    boolean extend = Boolean.valueOf(props.getProperty(EXTEND_PROPERTY, String.valueOf(true)));
+
     initWorkload(props, warningthread, workload, tracer);
 
     System.err.println("Starting test.");
     final CountDownLatch completeLatch = new CountDownLatch(threadcount);
 
     final List<ClientThread> clients = initDb(dbname, props, threadcount, targetperthreadperms,
-        workload, tracer, completeLatch);
+        workload, tracer, completeLatch, extend);
 
     if (status) {
       boolean standardstatus = false;
@@ -402,7 +424,7 @@ public final class Client {
 
   private static List<ClientThread> initDb(String dbname, Properties props, int threadcount,
                                            double targetperthreadperms, Workload workload, Tracer tracer,
-                                           CountDownLatch completeLatch) {
+                                           CountDownLatch completeLatch, boolean extend) {
     boolean initFailed = false;
     boolean dotransactions = Boolean.valueOf(props.getProperty(DO_TRANSACTIONS_PROPERTY, String.valueOf(true)));
 
@@ -440,7 +462,7 @@ public final class Client {
         }
 
         ClientThread t = new ClientThread(db, dotransactions, workload, props, threadopcount, targetperthreadperms,
-            completeLatch);
+            completeLatch, extend);
         t.setThreadId(threadid);
         t.setThreadCount(threadcount);
         clients.add(t);
@@ -460,7 +482,8 @@ public final class Client {
         .build();
   }
 
-  private static void initWorkload(Properties props, Thread warningthread, Workload workload, Tracer tracer) {
+  private static void initWorkload(Properties props, Thread warningthread, Workload workload, 
+        Tracer tracer) {
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_INIT_SPAN)) {
         workload.init(props);
