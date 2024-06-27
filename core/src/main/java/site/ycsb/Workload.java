@@ -119,6 +119,4 @@ public abstract class Workload {
   public boolean isStopRequested() {
     return stopRequested.get();
   }
-
-  protected abstract void initExtend(Properties props) throws WorkloadException;
 }
