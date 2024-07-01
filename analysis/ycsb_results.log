@@ -1,0 +1,11 @@
+=== Deleting the ycsb database on MongoDB, if any ===
+=== Setting extendproportion to 0 ===
+=== Executing the load phase with extendproportion=0 ===
+=== Executing the run phase with extendproportion=0 ===
+=== Deleting the ycsb database on MongoDB ===
+=== Setting extendproportion to 0.2 and other proportions to 0 ===
+=== Executing the load phase with extendproportion=0.2 and other proportions=0 ===
+=== Executing the run phase with extendproportion=0.2 and other proportions=0 ===
+=== Setting extendproportion back to 0 and read/update proportions to 0.5 ===
+=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ===
+=== All steps completed. Results are logged in ./ycsb_results.log ===

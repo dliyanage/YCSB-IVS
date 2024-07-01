@@ -1,13 +1,16 @@
 #!/bin/bash
 
 # Define the workload file and the log file
-WORKLOAD_FILE="./workloads/workloada-extend"
+WORKLOAD_FILE="./workloads/workloadd-extend"
 LOG_FILE="./ycsb_results.log"
 OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./all_experiments_1.csv"
+OUTPUT_FILE="./analysis/all_experiments_wld.csv"
+
+# Chosen workload
+workload_name="$(echo "$WORKLOAD_FILE" | sed -e 's/.*workload\([a-z]\)-.*/\1/')"
 
 # Extend phase experiment parameters
 extendproportion_extend="1"
@@ -18,10 +21,10 @@ insertproportion_extend="0"
 
 # After extend phase experiment parameters
 extendproportion_postextend="0"
-readproportion_postextend="1"
+readproportion_postextend="0.95"
 updateproportion_postextend="0"
 scanproportion_postextend="0"
-insertproportion_postextend="0"
+insertproportion_postextend="0.05"
 extendvaluesize_postextend="0"
 
 # Function to log and print messages
@@ -41,7 +44,7 @@ write_result() {
 
     if [ "$first" == "TRUE" ]; then   
         # Extract unique second values (except the first one) and create header
-        header="Epoch,Phase,Recordcount,Readallfields,Requestdist,Operation,Readprop,Updateprop,Scanprop,Insertprop,Extendprop,Runtime(ms),Throughput(ops/sec),$(awk '{print $2}' <<< "$filtered_output" | sed 's/,$//' | uniq | awk '{ORS=","; print}')"
+        header="Workload,Epoch,Phase,Recordcount,Readallfields,Requestdist,Operation,Readprop,Updateprop,Scanprop,Insertprop,Extendprop,Runtime(ms),Throughput(ops/sec),$(awk '{print $2}' <<< "$filtered_output" | sed 's/,$//' | uniq | awk '{ORS=","; print}')"
         echo "$header" > "$OUTPUT_FILE"
     fi
 
@@ -63,7 +66,7 @@ write_result() {
         done <<< "$overall_output"    
         # Append to the values variable
         if [ $k -eq 1 ]; then
-            values="$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
+            values="$workload_name,$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
             k=$((k+1))
             prev_operation="$operation"
         else
@@ -72,7 +75,7 @@ write_result() {
         if [ "$prev_operation" != "$operation" ]; then
             # Print the values to the output file
             echo "$values" >> "$OUTPUT_FILE"
-            values="$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
+            values="$workload_name,$epoch,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
             prev_operation="$operation"
         fi
     done <<< "$filtered_output"
@@ -91,7 +94,9 @@ log "=== Deleting the ycsb database on MongoDB, if any ==="
 mongosh 
 #use ycsb | tee -a $LOG_FILE
 #db.runCommand( { dropDatabase: 1 } ) | tee -a $LOG_FILE
+
 # Experiment parameters
+initial=1
 for epoch in $(seq 1 100); do
     # Step 2: Setting parameter values for extend phase
     log "=== Setting parameter values for extend phase ==="

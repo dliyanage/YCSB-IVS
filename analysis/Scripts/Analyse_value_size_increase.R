@@ -4,10 +4,10 @@ library(tidyverse)
 library(zoo)
 
 # Setting working directory
-setwd("~/Documents/Git_Repos/Develop/YCSB-IVS/analysis")
+setwd("~/Documents/Git_Repos/Develop/YCSB-IVS/analysis/Data")
 
 # Read output data
-data = read.csv("all_experiments.csv")
+data = read.csv("all_experiments_1.csv")
 head(data)
 
 # Replace 0 values with non-zero value correspond to the experiment
@@ -38,19 +38,22 @@ data = data %>%
 READ_data = data %>%
               filter(Phase=="run",Operation=="READ")
               
-# Plot average latency (us)  
-ggplot(READ_data, aes(x = Epoch, y = AverageLatency.us.)) +
-  geom_point() +
-  geom_line() +
+# Create the plot
+ggplot(READ_data, aes(x = Epoch)) +
+  geom_line(aes(y = AverageLatency.us.), color = "blue") +
+  geom_point(aes(y = AverageLatency.us.), color = "blue") +
+  geom_line(aes(y = Throughput.ops.sec.), color = "green") + # Multiply throughput to adjust scale
+  geom_point(aes(y = Throughput.ops.sec.), color = "green") +
+  scale_y_log10(
+    name = "Average Latency (us)",
+    sec.axis = sec_axis(~., name = "Throughput (ops/sec)")
+  ) +
   labs(
     title = "Average Latency for READ",
-    x = "Epoch",
-    y = "Average Latency (us)",
-    fill = "Avg Latency (us)"
+    x = "Epoch"
   ) +
   theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
-  
+  theme(plot.title = element_text(hjust = 0.5))  
 
 # Latency for UPDATE
 UPDATE_data = data %>%
