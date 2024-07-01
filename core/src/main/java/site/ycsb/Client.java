@@ -146,6 +146,11 @@ public final class Client {
   public static final String DO_TRANSACTIONS_PROPERTY = "dotransactions";
 
   /**
+   * Whether or not this is the value extension happens or not.
+   */
+  public static final String EXTEND_PROPERTY = "extend";
+
+  /**
    * Whether or not to show status during run.
    */
   public static final String STATUS_PROPERTY = "status";
@@ -312,13 +317,21 @@ public final class Client {
     // Include the variable to indicate whether the extension operation to perform
     double extendproportion = Double.parseDouble(props.getProperty("extendproportion"));
 
+    if(extendproportion > 0){
+      props.setProperty(EXTEND_PROPERTY, String.valueOf(true));
+    }else {
+      props.setProperty(EXTEND_PROPERTY, String.valueOf(false));
+    }
+
+    boolean extend = Boolean.valueOf(props.getProperty(EXTEND_PROPERTY, String.valueOf(true)));
+
     initWorkload(props, warningthread, workload, tracer);
 
     System.err.println("Starting test.");
     final CountDownLatch completeLatch = new CountDownLatch(threadcount);
 
     final List<ClientThread> clients = initDb(dbname, props, threadcount, targetperthreadperms,
-        workload, tracer, completeLatch);
+        workload, tracer, completeLatch, extend);
 
     if (status) {
       boolean standardstatus = false;
@@ -411,7 +424,7 @@ public final class Client {
 
   private static List<ClientThread> initDb(String dbname, Properties props, int threadcount,
                                            double targetperthreadperms, Workload workload, Tracer tracer,
-                                           CountDownLatch completeLatch) {
+                                           CountDownLatch completeLatch, boolean extend) {
     boolean initFailed = false;
     boolean dotransactions = Boolean.valueOf(props.getProperty(DO_TRANSACTIONS_PROPERTY, String.valueOf(true)));
 
@@ -449,7 +462,7 @@ public final class Client {
         }
 
         ClientThread t = new ClientThread(db, dotransactions, workload, props, threadopcount, targetperthreadperms,
-            completeLatch);
+            completeLatch, extend);
         t.setThreadId(threadid);
         t.setThreadCount(threadcount);
         clients.add(t);

@@ -562,6 +562,23 @@ public class CoreWorkload extends Workload {
   }
 
   /**
+   * Initialize the fields for Extend method.
+   * Called once, in the main client thread, before any operations are started.
+   */
+  @Override
+  public void initExtend(Properties p) throws WorkloadException {
+    extendfieldnames = new ArrayList<>();
+    extendfieldcount = fieldcount + Long.parseLong(p.getProperty(FIELD_COUNT_PROPERTY, 
+    FIELD_COUNT_PROPERTY_DEFAULT));
+    final String fieldnameprefix = FIELD_NAME_PREFIX_DEFAULT;
+    for (int i = (int)fieldcount; i < extendfieldcount; i++) {
+      extendfieldnames.add(fieldnameprefix + i);
+    }
+    fieldnames.addAll(extendfieldnames); 
+    fieldcount = extendfieldcount;
+  }
+
+  /**
    * Builds a value for a randomly chosen field.
    */
   private HashMap<String, ByteIterator> buildSingleValue(String key) {

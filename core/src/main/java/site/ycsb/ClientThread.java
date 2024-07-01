@@ -46,6 +46,7 @@ public class ClientThread implements Runnable {
   private Properties props;
   private long targetOpsTickNs;
   private final Measurements measurements;
+  private final boolean extend;
 
   /**
    * Constructor.
@@ -57,13 +58,15 @@ public class ClientThread implements Runnable {
    * @param opcount              the number of operations (transactions or inserts) to do
    * @param targetperthreadperms target number of operations per thread per ms
    * @param completeLatch        The latch tracking the completion of all clients.
+   * @param extend               true to extend the number of fields
    */
   public ClientThread(DB db, boolean dotransactions, Workload workload, Properties props, int opcount,
-                      double targetperthreadperms, CountDownLatch completeLatch) {
+                      double targetperthreadperms, CountDownLatch completeLatch, boolean extend) {
     this.db = db;
     this.dotransactions = dotransactions;
     this.workload = workload;
     this.opcount = opcount;
+    this.extend = extend;
     opsdone = 0;
     if (targetperthreadperms > 0) {
       targetOpsPerMs = targetperthreadperms;
