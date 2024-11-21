@@ -2,13 +2,22 @@
 
 YCSB="bin/ycsb.sh"
 
+# DB names
+DB_NAME="ycsb_rdb"
+BACKUP_DB_NAME="ycsb_backup_rdb"
+UNCHANGE_DB_NAME="ycsb_unchange_rdb"
+
+# Check size of MyRocks file system
+DB_PATH="/var/lib/mysql/#rocksdb"
+
 # Path to the RocksDB data directory
-DB_URL="jdbc:mysql://localhost:3306/ycsb"
+DB_URL="jdbc:mysql://localhost:3306/$DB_NAME"
 JDBC_PROPERTIES="jdbc-binding/conf/db.properties"
 DB_USERNAME="ycsb_user"
 DB_PWD="password"
-BACKUP_URL="jdbc:mysql://localhost:3306/ycsb_backup"
+BACKUP_URL="jdbc:mysql://localhost:3306/$BACKUP_DB_NAME"
 BACKUP_FILE="./ycsb_dump.sql"
+UNCHANGE_DB_URL="jdbc:mysql://localhost:3306/$UNCHANGE_DB_NAME"
 
 # Define the workload file and the log file
 WORKLOAD_FILE="./workloads/workloada-extend"
@@ -17,11 +26,11 @@ OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./mariadb_experiment_dumpload_run1_hotspot.csv"
+OUTPUT_FILE="./analysis/Data/mariadb_exp_rdb_run2_uniform_test.csv"
 
 # Key size gathering
 KEY_SIZE_LOG="key_sizes.csv"
-KEY_SIZE_FILE="key_size_distribution_run1_hotspot.csv"
+KEY_SIZE_FILE="./analysis/Data/key_size_dist_rdb_run2_uniform_test.csv"
 
 # Extend phase experiment parameters
 extendproportion_extend="1"
@@ -37,11 +46,27 @@ updateproportion_postextend="0"
 scanproportion_postextend="0"
 insertproportion_postextend="0"
 
+fieldlengthoriginal="100"
+
+# Create databases
+#mysql -u root --password= -e "
+#DROP DATABASE IF EXISTS $DB_NAME; 
+#CREATE DATABASE $DB_NAME; 
+#GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USERNAME'@'localhost'; 
+#FLUSH PRIVILEGES;
+#USE $DB_NAME;
+#CREATE TABLE usertable ( YCSB_KEY VARCHAR(255) PRIMARY KEY NOT NULL,  
+#FIELD0 LONGTEXT, FIELD1 LONGTEXT, FIELD2 LONGTEXT, FIELD3 LONGTEXT, FIELD4 LONGTEXT, 
+#FIELD5 LONGTEXT, FIELD6 LONGTEXT, FIELD7 LONGTEXT,FIELD8 LONGTEXT,  FIELD9 LONGTEXT) 
+#ENGINE=RocksDB DEFAULT COLLATE=latin1_bin;"
+
 # Flush database contents already existing
 mysql -u root --password= -e " 
-USE ycsb; 
+USE $DB_NAME; 
 DELETE FROM usertable;
-USE ycsb_backup; 
+USE $BACKUP_DB_NAME; 
+DELETE FROM usertable;
+USE $UNCHANGE_DB_NAME; 
 DELETE FROM usertable;"
 
 # Function to log and print messages
@@ -63,7 +88,7 @@ write_result() {
 
     if [ "$first" == "TRUE" ]; then   
         # Extract unique second values (except the first one) and create header
-        header="Epoch,Phase,Recordcount,Readallfields,Requestdist,Operation,SSTsize,LOGsize,Readprop,Updateprop,Scanprop,Insertprop,Extendprop,Runtime(ms),Throughput(ops/sec),$(awk '{print $2}' <<< "$filtered_output" | sed 's/,$//' | uniq | awk '{ORS=","; print}')"
+        header="Epoch,Phase,Recordcount,Readallfields,Requestdist,Operation,SSTsize,LOGsize,CPU,Memory,sst_files,total_sst_size,lsm_levels,pending_compactions,lsm_memory_usage,Readprop,Updateprop,Scanprop,Insertprop,Extendprop,Runtime(ms),Throughput(ops/sec),$(awk '{print $2}' <<< "$filtered_output" | sed 's/,$//' | uniq | awk '{ORS=","; print}')"
         echo "$header" > "$OUTPUT_FILE"
     fi
 
@@ -89,13 +114,13 @@ write_result() {
 
         # Append to the values variable
         if [ $k -eq 1 ]; then
-            values_1="$r,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$sstsize,$logsize,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
+            values_1="$r,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$sstsize,$logsize,$cpu,$memory,$sst_files,$total_sst_size,$lsm_levels,$pending_compactions,$lsm_memory_usage,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
             k=$((k + 1))
             prev_operation="$operation"
         elif [ $p -eq 1 ] && [ "$prev_operation" == "$operation" ]; then
             values_1="$values_1,$third_value"
         elif [ $p -eq 1 ] && [ "$prev_operation" != "$operation" ]; then
-            values_2="$r,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$sstsize,$logsize,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
+            values_2="$r,$phase,$recordcount,$readallfields,$requestdistribution,$operation,$sstsize,$logsize,$cpu,$memory,$sst_files,$total_sst_size,$lsm_levels,$pending_compactions,$lsm_memory_usage,$readproportion,$updateproportion,$scanproportion,$insertproportion,$extendproportion,${run_specific[0]},${run_specific[1]},$third_value"
             p=$((p + 1))
             prev_operation="$operation"
         else
@@ -146,18 +171,56 @@ append_subsequent_iterations() {
     echo "Iteration $iteration: Appended new size values from $KEY_SIZE_LOG to $KEY_SIZE_FILE"
 }
 
+# Global variables for storing MyRocks LSM tree statistics
+sst_files=""
+total_sst_size=""
+lsm_levels=""
+pending_compactions=""
+lsm_memory_usage=""
+
+# Function to extract MyRocks LSM tree statistics
+function extract_myrocks_stats() {
+    local db="$1"
+    # Run the MyRocks status command and capture the output
+    myrocks_status=$(mysql -u root --password= -e "USE $db; SHOW ENGINE ROCKSDB STATUS\G")
+
+    # Extract specific LSM tree values using grep and awk
+
+    # Total number of SST files
+    sst_files=$(echo "$myrocks_status" | grep -oP 'Total\s+Sst\s+files\s+in\s+all\s+levels:\s+\K\d+')
+
+    # Size of all SST files
+    total_sst_size=$(echo "$myrocks_status" | grep -oP 'Total\s+size\s+of\s+all\s+SST\s+files:\s+\K[0-9]+(?:\.[0-9]+)?\s+[A-Za-z]+')
+
+    # Number of LSM levels
+    lsm_levels=$(echo "$myrocks_status" | grep -oP 'Number\s+of\s+LSM\s+tree\s+levels:\s+\K\d+')
+
+    # Pending compactions
+    pending_compactions=$(echo "$myrocks_status" | grep -oP 'Pending\s+compaction\s+bytes:\s+\K[0-9]+(?:\.[0-9]+)?\s+[A-Za-z]+')
+
+    # Memory usage for LSM
+    lsm_memory_usage=$(echo "$myrocks_status" | grep -oP 'Block\s+cache\s+usage:\s+\K[0-9]+(?:\.[0-9]+)?\s+[A-Za-z]+')
+
+}
+
 # Step 1: Delete the ycsb database on MongoDB if any
 log "=== Deleting the ycsb database on MongoDB, if any ==="
 #rm -rf "$DB_PATH"
 #echo "RocksDB database at $DB_PATH has been deleted."
 
-# Step 2: Execute the load phase
+# Execute the load phase
 log "=== Executing the load phase ==="
 phase="load"
 $YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV 
-#sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1)
-#logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1) 
+sstsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.sst | tail -n 1 | cut -f1')
+logsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.log | tail -n 1 | cut -f1') 
+cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
+memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
+extract_myrocks_stats $DB_NAME
 write_result "TRUE"
+
+# Load unchange value size (reference) DB
+$YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
 
 # Experiment parameters
 for epoch in $(seq 1 10); do
@@ -175,8 +238,11 @@ for epoch in $(seq 1 10); do
         log "=== Executing the run phase with extendproportion=0.2 and other proportions=0 ==="
         phase="extend"
         $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        #sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1)
-        #logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1) 
+        sstsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.sst | tail -n 1 | cut -f1')
+        logsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.log | tail -n 1 | cut -f1')  
+        cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
+        memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
+        extract_myrocks_stats $DB_NAME
         write_result "FALSE"
 
         # Step 5: Setting parameter values for run phase
@@ -188,43 +254,59 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_postextend/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 
-        # Step 6: Execute the run phase
+        # Execute the run phase
         log "=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ==="
         phase="run"
         $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        #sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1) 
-        #logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1) 
+        sstsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.sst | tail -n 1 | cut -f1')
+        logsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.log | tail -n 1 | cut -f1') 
+        cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
+        memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
+        extract_myrocks_stats $DB_NAME
         write_result "FALSE"
 
         # Close the RocksDB database
         #close_db "$DB_PATH"
+
+        # Workload with unchanging value sizes
+        phase="reference"
+        $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
+        sstsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.sst | tail -n 1 | cut -f1')
+        logsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.log | tail -n 1 | cut -f1') 
+        cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
+        memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
+        extract_myrocks_stats $UNCHANGE_DB_NAME
+        write_result "FALSE"
     
         if (( $((10*($epoch-1)+$run)) % 1 == 0 )); then
             phase="clean-run"
             
             echo "Backing up the database started"
             mysql -u root --password= -e "
-            DROP DATABASE IF EXISTS ycsb_backup; 
-            CREATE DATABASE ycsb_backup; 
-            GRANT ALL PRIVILEGES ON ycsb_backup.* TO '$DB_USERNAME'@'localhost'; 
+            DROP DATABASE IF EXISTS $BACKUP_DB_NAME; 
+            CREATE DATABASE $BACKUP_DB_NAME; 
+            GRANT ALL PRIVILEGES ON $BACKUP_DB_NAME.* TO '$DB_USERNAME'@'localhost'; 
             FLUSH PRIVILEGES;"
 
-            /usr/bin/mysqldump -u root --password= ycsb > "$BACKUP_FILE"
+            /usr/bin/mysqldump -u root --password= $DB_NAME > "$BACKUP_FILE"
             wait
-            /usr/bin/mysql -u root --password= ycsb_backup < "$BACKUP_FILE"
+            /usr/bin/mysql -u root --password= $BACKUP_DB_NAME < "$BACKUP_FILE"
             wait
             echo "Backing up the database finished"
 
             $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-            #sstsize=$(du -sck "$RESTORE_DIR"/*.sst | tail -n 1| cut -f1) 
-            #logsize=$(du -sck "$RESTORE_DIR"/*.log | tail -n 1| cut -f1) 
+            sstsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.sst | tail -n 1 | cut -f1')
+            logsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.log | tail -n 1 | cut -f1') 
+            cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
+            memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
+            extract_myrocks_stats $BACKUP_DB_NAME
             rm -rf $BACKUP_FILE
             write_result "FALSE"
 
             # Key Sizes
             echo "Size computation started"
             mysql -u root --password= -e " 
-            USE ycsb_backup; 
+            USE $BACKUP_DB_NAME; 
             SELECT YCSB_KEY, 
                     (LENGTHB(FIELD0) + LENGTHB(FIELD1) + LENGTHB(FIELD2) + LENGTHB(FIELD3) + 
                     LENGTHB(FIELD4) + LENGTHB(FIELD5) + LENGTHB(FIELD6) + LENGTHB(FIELD7) + 
@@ -243,9 +325,50 @@ for epoch in $(seq 1 10); do
             else
                 append_subsequent_iterations
             fi
-        fi
-    done
 
+            # Extract the recordcount from the workload file (assuming recordcount is in the form 'recordcount=1000')
+            recordcount=$(grep -E '^recordcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
+
+            # MySQL query to get the total size of all records
+            total_size=$(mysql -u root --password= -e "
+            USE $BACKUP_DB_NAME; 
+            SELECT SUM(
+                LENGTHB(FIELD0) + LENGTHB(FIELD1) + LENGTHB(FIELD2) + LENGTHB(FIELD3) + 
+                LENGTHB(FIELD4) + LENGTHB(FIELD5) + LENGTHB(FIELD6) + LENGTHB(FIELD7) + 
+                LENGTHB(FIELD8) + LENGTHB(FIELD9)
+            ) FROM usertable;" -s -N)
+
+            # Set average field length
+            fieldlengthaverage=$(echo "$total_size / (10 * $recordcount)" | bc)
+
+            # Chainging the value size for comparison
+            perl -i -p -e "s/^fieldlength=.*/fieldlength=$fieldlengthaverage/" $WORKLOAD_FILE
+            source "$WORKLOAD_FILE"
+
+            mysql -u root --password= -e " 
+            USE $BACKUP_DB_NAME; 
+            DELETE FROM usertable;"
+
+            # Resetting the database with new data load
+            log "=== Executing the load phase for the comparison study ==="
+            $YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
+            
+            # Chainging the value size for comparison
+            perl -i -p -e "s/^fieldlength=.*/fieldlength=$fieldlengthoriginal/" $WORKLOAD_FILE
+            source "$WORKLOAD_FILE"
+
+            # Step 6: Execute the run phase
+            log "=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ==="
+            phase="avg-run"
+            $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
+            sstsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.sst | tail -n 1 | cut -f1')
+            logsize=$(sudo DB_PATH="$DB_PATH" bash -c 'du -sck "$DB_PATH"/*.log | tail -n 1 | cut -f1') 
+            cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
+            memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
+            extract_myrocks_stats $BACKUP_DB_NAME
+            write_result "FALSE"
+            fi
+    done
 done
 
 log "=== All steps completed. Results are logged in $LOG_FILE ==="

@@ -22,8 +22,6 @@ import site.ycsb.ByteIterator;
 import site.ycsb.Status;
 import site.ycsb.StringByteIterator;
 
-import java.io.FileWriter;
-import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -72,9 +70,6 @@ public class JdbcDBClient extends DB {
   /** The name of the property for the number of fields in a record. */
   public static final String FIELD_COUNT_PROPERTY = "fieldcount";
 
-  /** The extend property. */
-  public static final String EXTEND_PROPERTY = "extendproportion";
-
   /** Default number of fields in a record. */
   public static final String FIELD_COUNT_PROPERTY_DEFAULT = "10";
 
@@ -105,9 +100,6 @@ public class JdbcDBClient extends DB {
   /** DB flavor defines DB-specific syntax and behavior for the
    * particular database. Current database flavors are: {default, phoenix} */
   private DBFlavor dbFlavor;
-
-  /** FileWriter for logging key sizes. */
-  private FileWriter keySizeWriter;
 
   /**
    * Ordered field information for insert and update statements.
@@ -195,23 +187,12 @@ public class JdbcDBClient extends DB {
     String user = props.getProperty(CONNECTION_USER, DEFAULT_PROP);
     String passwd = props.getProperty(CONNECTION_PASSWD, DEFAULT_PROP);
     String driver = props.getProperty(DRIVER_CLASS);
-    String extend = props.getProperty(EXTEND_PROPERTY);
 
     this.jdbcFetchSize = getIntProperty(props, JDBC_FETCH_SIZE);
     this.batchSize = getIntProperty(props, DB_BATCH_SIZE);
 
     this.autoCommit = getBoolProperty(props, JDBC_AUTO_COMMIT, true);
     this.batchUpdates = getBoolProperty(props, JDBC_BATCH_UPDATES, false);
-
-    // Initialize the key size logger
-    try {
-      if (!extend.equals("0")) {
-        keySizeWriter = new FileWriter("key_sizes.csv");
-        keySizeWriter.append("Key,Size\n"); // Adding CSV headers
-      }
-    } catch (IOException e) {
-      System.err.println("Error initializing CSV writer: " + e);
-    }
 
     try {
 //  The SQL Syntax for Scan depends on the DB engine
@@ -273,11 +254,6 @@ public class JdbcDBClient extends DB {
     initialized = true;
   }
 
-  private void print(String extend) {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'print'");
-  }
-
   @Override
   public void cleanup() throws DBException {
     if (batchSize > 0) {
@@ -299,16 +275,6 @@ public class JdbcDBClient extends DB {
     } catch (SQLException e) {
       System.err.println("Error in closing the connection. " + e);
       throw new DBException(e);
-    }
-
-    // Close the CSV writer for key sizes
-    try {
-      if (keySizeWriter != null) {
-        keySizeWriter.flush();
-        keySizeWriter.close();
-      }
-    } catch (IOException e) {
-      System.err.println("Error closing CSV writer: " + e);
     }
 
     super.cleanup();
@@ -393,24 +359,6 @@ public class JdbcDBClient extends DB {
         }
       }
       resultSet.close();
-
-      // Log the key and its size to the CSV file
-      try {
-        // Compute the total size of the value(s) in bytes
-        int valueSize = 0;
-        if (result != null) {
-          for (ByteIterator byteIterator : result.values()) {
-            valueSize += byteIterator.toArray().length;
-          }
-        }
-        
-        if (keySizeWriter != null) {
-          keySizeWriter.append(key).append(",").append(String.valueOf(valueSize)).append("\n");
-        }
-      } catch (IOException e) {
-        System.err.println("Error writing to CSV file for key-value sizes: " + e);
-      }
-
       return Status.OK;
     } catch (SQLException e) {
       System.err.println("Error in processing read of table " + tableName + ": " + e);
