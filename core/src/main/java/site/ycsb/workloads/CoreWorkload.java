@@ -33,6 +33,7 @@ import java.util.*;
  * <UL>
  * <LI><b>fieldcount</b>: the number of fields in a record (default: 10)
  * <LI><b>fieldlength</b>: the size of each field (default: 100)
+ * <LI><b>maxfieldlength</b>: the minimum size of each field (default: 1600000)
  * <LI><b>minfieldlength</b>: the minimum size of each field (default: 1)
  * <LI><b>readallfields</b>: should reads read all fields (true) or just one (false) (default: true)
  * <LI><b>writeallfields</b>: should updates and read/modify/writes update all fields (true) or just
@@ -102,11 +103,13 @@ public class CoreWorkload extends Workload {
    * specified in the "fieldlengthhistogram" property.
    */
   public static final String FIELD_LENGTH_DISTRIBUTION_PROPERTY = "fieldlengthdistribution";
+  public static final String EXTEND_FIELD_LENGTH_DISTRIBUTION_PROPERTY = "extendfieldlengthdistribution";
 
   /**
    * The default field length distribution.
    */
   public static final String FIELD_LENGTH_DISTRIBUTION_PROPERTY_DEFAULT = "constant";
+  public static final String EXTEND_FIELD_LENGTH_DISTRIBUTION_PROPERTY_DEFAULT = "constant";
 
   /**
    * The name of the property for the length of a field in bytes.
@@ -117,6 +120,26 @@ public class CoreWorkload extends Workload {
    * The default maximum length of a field in bytes.
    */
   public static final String FIELD_LENGTH_PROPERTY_DEFAULT = "100";
+
+  /**
+   * The name of the property for the length of a field in bytes for extentions.
+   */
+  public static final String EXTEND_FIELD_LENGTH_PROPERTY = "extendfieldlength";
+
+  /**
+   * The default maximum length of a field in bytes for extentions.
+   */
+  public static final String EXTEND_FIELD_LENGTH_PROPERTY_DEFAULT = "100";
+
+  /**
+   * The name of the property for the maximum length of a field in bytes.
+   */
+  public static final String MAX_FIELD_LENGTH_PROPERTY = "maxfieldlength";
+
+  /**
+   * The default maximum length of a field in bytes.
+   */
+  public static final String MAX_FIELD_LENGTH_PROPERTY_DEFAULT = "1600000";
 
   /**
    * The name of the property for the minimum length of a field in bytes.
@@ -133,6 +156,7 @@ public class CoreWorkload extends Workload {
    * used if fieldlengthdistribution is "histogram").
    */
   public static final String FIELD_LENGTH_HISTOGRAM_FILE_PROPERTY = "fieldlengthhistogram";
+  public static final String EXTEND_FIELD_LENGTH_HISTOGRAM_FILE_PROPERTY = "extendfieldlengthhistogram";
 
   /**
    * The default filename containing a field length histogram.
@@ -144,6 +168,13 @@ public class CoreWorkload extends Workload {
    * start with "FIELD_LENGTH_".
    */
   protected NumberGenerator fieldlengthgenerator;
+  protected NumberGenerator extendfieldlengthgenerator;
+
+  /**
+   * Generator object that produces field lengths.  The value of this depends on the properties that
+   * start with "FIELD_LENGTH_".
+   */
+  protected long maxfieldlength;
 
   /**
    * The name of the property for deciding whether to read one field (false) or all fields (true) of
@@ -428,6 +459,37 @@ public class CoreWorkload extends Workload {
     return fieldlengthgenerator;
   }
 
+  /* For extension operations */
+  protected static NumberGenerator getExtendFieldLengthGenerator(Properties p) throws WorkloadException {
+    NumberGenerator extendfieldlengthgenerator;
+    String extendfieldlengthdistribution = p.getProperty(
+        EXTEND_FIELD_LENGTH_DISTRIBUTION_PROPERTY, EXTEND_FIELD_LENGTH_DISTRIBUTION_PROPERTY_DEFAULT);
+    int extendfieldlength =
+        Integer.parseInt(p.getProperty(EXTEND_FIELD_LENGTH_PROPERTY, EXTEND_FIELD_LENGTH_PROPERTY_DEFAULT));
+    int minfieldlength =
+        Integer.parseInt(p.getProperty(MIN_FIELD_LENGTH_PROPERTY, MIN_FIELD_LENGTH_PROPERTY_DEFAULT));
+    String extendfieldlengthhistogram = p.getProperty(
+        FIELD_LENGTH_HISTOGRAM_FILE_PROPERTY, FIELD_LENGTH_HISTOGRAM_FILE_PROPERTY_DEFAULT);
+    if (extendfieldlengthdistribution.compareTo("constant") == 0) {
+      extendfieldlengthgenerator = new ConstantIntegerGenerator(extendfieldlength);
+    } else if (extendfieldlengthdistribution.compareTo("uniform") == 0) {
+      extendfieldlengthgenerator = new UniformLongGenerator(minfieldlength, extendfieldlength);
+    } else if (extendfieldlengthdistribution.compareTo("zipfian") == 0) {
+      extendfieldlengthgenerator = new ZipfianGenerator(minfieldlength, extendfieldlength);
+    } else if (extendfieldlengthdistribution.compareTo("histogram") == 0) {
+      try {
+        extendfieldlengthgenerator = new HistogramGenerator(extendfieldlengthhistogram);
+      } catch (IOException e) {
+        throw new WorkloadException(
+            "Couldn't read extend field length histogram file: " + extendfieldlengthhistogram, e);
+      }
+    } else {
+      throw new WorkloadException(
+          "Unknown extend field length distribution \"" + extendfieldlengthdistribution + "\"");
+    }
+    return extendfieldlengthgenerator;
+  }
+
   /**
    * Initialize the scenario.
    * Called once, in the main client thread, before any operations are started.
@@ -444,6 +506,8 @@ public class CoreWorkload extends Workload {
       fieldnames.add(fieldnameprefix + i);
     }
     fieldlengthgenerator = CoreWorkload.getFieldLengthGenerator(p);
+    extendfieldlengthgenerator = CoreWorkload.getExtendFieldLengthGenerator(p);
+    maxfieldlength = Long.parseLong(p.getProperty(MAX_FIELD_LENGTH_PROPERTY, MAX_FIELD_LENGTH_PROPERTY_DEFAULT));
 
     recordcount =
         Long.parseLong(p.getProperty(Client.RECORD_COUNT_PROPERTY, Client.DEFAULT_RECORD_COUNT));
@@ -581,6 +645,25 @@ public class CoreWorkload extends Workload {
   }
 
   /**
+   * Builds a value for a randomly chosen field while extending.
+   */
+  private HashMap<String, ByteIterator> buildSingleValueExtend(String key) {
+    HashMap<String, ByteIterator> value = new HashMap<>();
+    
+    String fieldkey = fieldnames.get(fieldchooser.nextValue().intValue());
+    ByteIterator data;
+    if (dataintegrity) {
+      data = new StringByteIterator(buildDeterministicValue(key, fieldkey));
+    } else {
+      // fill with random data
+      data = new RandomByteIterator(extendfieldlengthgenerator.nextValue().longValue());
+    }
+    value.put(fieldkey, data);
+
+    return value;
+  }
+
+  /**
    * Builds values for all fields.
    */
   private HashMap<String, ByteIterator> buildValues(String key) {
@@ -605,13 +688,13 @@ public class CoreWorkload extends Workload {
   private HashMap<String, ByteIterator> buildValuesExtend(String key) {
     HashMap<String, ByteIterator> values = new HashMap<>();
 
-    for (String fieldkey : extendfieldnames) {
+    for (String fieldkey : fieldnames) {
       ByteIterator data;
       if (dataintegrity) {
         data = new StringByteIterator(buildDeterministicValue(key, fieldkey));
       } else {
         // fill with random data
-        data = new RandomByteIterator(fieldlengthgenerator.nextValue().longValue());
+        data = new RandomByteIterator(extendfieldlengthgenerator.nextValue().longValue());
       }
       values.put(fieldkey, data);
     }
@@ -880,13 +963,13 @@ public class CoreWorkload extends Workload {
     
     if (writeallfields) {
       // new data for all the fields
-      values = buildValues(keyname);
+      values = buildValuesExtend(keyname);
     } else {
       // update a random field
-      values = buildSingleValue(keyname);
+      values = buildSingleValueExtend(keyname);
     }
     
-    db.extend(table, keyname, values);
+    db.extend(table, keyname, values, maxfieldlength);
   }
 
   public void doTransactionInsert(DB db) {

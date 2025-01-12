@@ -261,11 +261,11 @@ public class DBWrapper extends DB {
    * @return The result of the operation.
    */
   @Override
-  public Status extend(String table, String key, Map<String, ByteIterator> values) {
+  public Status extend(String table, String key, Map<String, ByteIterator> values, long maxfieldlength) {
     try (final TraceScope span = tracer.newScope(scopeStringInsert)) {
       long ist = measurements.getIntendedStartTimeNs();
       long st = System.nanoTime();
-      Status res = db.extend(table, key, values);
+      Status res = db.extend(table, key, values, maxfieldlength);
       long en = System.nanoTime();
       measure("EXTEND", res, ist, st, en);
       measurements.reportStatus("EXTEND", res);
