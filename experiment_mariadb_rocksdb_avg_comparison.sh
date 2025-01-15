@@ -26,11 +26,11 @@ OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./analysis/Data/mariadb_exp_rdb_run2_uniform_test.csv"
+OUTPUT_FILE="./analysis/Data/mariadb_exp_rdb_run2_zipfian_hwd.csv"
 
 # Key size gathering
 KEY_SIZE_LOG="key_sizes.csv"
-KEY_SIZE_FILE="./analysis/Data/key_size_dist_rdb_run2_uniform_test.csv"
+KEY_SIZE_FILE="./analysis/Data/key_size_dist_rdb_run2_zipfian_hwd.csv"
 
 # Extend phase experiment parameters
 extendproportion_extend="1"
@@ -38,6 +38,7 @@ readproportion_extend="0"
 updateproportion_extend="0"
 scanproportion_extend="0"
 insertproportion_extend="0"
+requestdistribution_extend="zipfian"
 
 # After extend phase experiment parameters
 extendproportion_postextend="0"
@@ -45,6 +46,7 @@ readproportion_postextend="1"
 updateproportion_postextend="0"
 scanproportion_postextend="0"
 insertproportion_postextend="0"
+requestdistribution_postextend="uniform"
 
 fieldlengthoriginal="100"
 
@@ -232,6 +234,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_extend/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 
         # Step 4: Execute the run phase
@@ -252,6 +255,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_postextend/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 
         # Execute the run phase

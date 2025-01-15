@@ -12,9 +12,6 @@ DB_URL="jdbc:mysql://localhost:3306/$DB_NAME"
 JDBC_PROPERTIES="jdbc-binding/conf/db.properties"
 DB_USERNAME="ycsb_user"
 DB_PWD="password"
-BACKUP_URL="jdbc:mysql://localhost:3306/$BACKUP_DB_NAME"
-BACKUP_FILE="./ycsb_dump.sql"
-UNCHANGE_DB_URL="jdbc:mysql://localhost:3306/$UNCHANGE_DB_NAME"
 
 # Define the workload file and the log file
 WORKLOAD_FILE="./workloads/workloada-extend"
@@ -23,29 +20,14 @@ OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./analysis/Data/mariadb_exp_inno_run1_zipfian_hwd.csv"
+OUTPUT_FILE="./analysis/Data/mariadb_exp_inno_run3_spreadrun.csv"
 
 # Key size gathering
 KEY_SIZE_LOG="key_sizes.csv"
-KEY_SIZE_FILE="./analysis/Data/key_size_dist_inno_run1_zipfian_hwd.csv"
-
-# Extend phase experiment parameters
-extendproportion_extend="1"
-readproportion_extend="0"
-updateproportion_extend="0"
-scanproportion_extend="0"
-insertproportion_extend="0"
-requestdistribution_extend="zipfian"
-
-# After extend phase experiment parameters
-extendproportion_postextend="0"
-readproportion_postextend="1"
-updateproportion_postextend="0"
-scanproportion_postextend="0"
-insertproportion_postextend="0"
-requestdistribution_postextend="uniform"
+KEY_SIZE_FILE="./analysis/Data/key_size_dist_inno_run3_spreadrun.csv"
 
 fieldlengthoriginal="100"
+operationcount="10000"
 
 # Create databases
 #mysql -u root --password= -e "
@@ -62,10 +44,6 @@ fieldlengthoriginal="100"
 # Flush database contents already existing
 mysql -u root --password= -e " 
 USE $DB_NAME; 
-DELETE FROM usertable;
-USE $BACKUP_DB_NAME; 
-DELETE FROM usertable;
-USE $UNCHANGE_DB_NAME; 
 DELETE FROM usertable;"
 
 # Function to log and print messages
@@ -422,155 +400,49 @@ memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
 extract_innodb_stats $DB_NAME
 write_result "TRUE"
 
-# Load unchange value size (reference) DB
-$YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-
 # Experiment parameters
 for epoch in $(seq 1 10); do
     for run in $(seq 1 10); do
-        # Step 3: Setting parameter values for extend phase
-        log "=== Setting parameter values for extend phase ==="
-        perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_extend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^readproportion=.*/readproportion=$readproportion_extend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_extend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_extend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_extend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_extend/" $WORKLOAD_FILE
-        source "$WORKLOAD_FILE"
 
-        # Step 4: Execute the run phase
-        log "=== Executing the run phase with extendproportion=0.2 and other proportions=0 ==="
-        phase="extend"
+        # Set proportions for insert mode
+        perl -i -p -e "s/^insertproportion=.*/insertproportion=1/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readproportion=.*/readproportion=0/" $WORKLOAD_FILE
+
+        # Extract the recordcount and operationcount from the workload file
+        operationcount=$(grep -E '^operationcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
+        recordcount=$(grep -E '^recordcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
+        
+        # Compute the new record number to be added
+        updatedoperationcount=$(echo "($operationcount / 10)" | bc)
+
+        # Change operation count for insert mode
+        perl -i -p -e "s/^operationcount=.*/operationcount=$updatedoperationcount/" $WORKLOAD_FILE
+
         $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        #sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1)
-        #logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1) 
-        cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
-        memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
-        extract_innodb_stats $DB_NAME
-        write_result "FALSE"
 
-        # Step 5: Setting parameter values for run phase
+        # Set proportions for read mode
+        perl -i -p -e "s/^insertproportion=.*/insertproportion=0/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readproportion=.*/readproportion=1/" $WORKLOAD_FILE
+
+        # Compute new record count
+        updatedrecordcount=$(echo "$recordcount + ($operationcount / 10)" | bc)
+
+        # Setting parameter values for read phase
         log "=== Setting parameter values for run phase ==="
-        perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_postextend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^readproportion=.*/readproportion=$readproportion_postextend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_postextend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_postextend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_postextend/" $WORKLOAD_FILE
-        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_postextend/" $WORKLOAD_FILE
-        source "$WORKLOAD_FILE"
+        perl -i -p -e "s/^recordcount=.*/recordcount=$updatedrecordcount/" $WORKLOAD_FILE
+        # Change operation count for read mode
+        perl -i -p -e "s/^operationcount=.*/operationcount=$operationcount/" $WORKLOAD_FILE
+        source "$WORKLOAD_FILE" 
 
         # Execute the run phase
         log "=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ==="
-        phase="run"
+        phase="spread-run"
         $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        #sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1) 
-        #logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1)
         cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
         memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
         extract_innodb_stats $DB_NAME
         write_result "FALSE"
 
-        # Close the RocksDB database
-        #close_db "$DB_PATH"
-
-        # Workload with unchanging value sizes
-        phase="reference"
-        $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
-        memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
-        extract_innodb_stats $UNCHANGE_DB_NAME
-        write_result "FALSE"
-    
-        if (( $((10*($epoch-1)+$run)) % 1 == 0 )); then
-            phase="clean-run"
-            
-            echo "Backing up the database started"
-            mysql -u root --password= -e "
-            DROP DATABASE IF EXISTS $BACKUP_DB_NAME; 
-            CREATE DATABASE $BACKUP_DB_NAME; 
-            GRANT ALL PRIVILEGES ON $BACKUP_DB_NAME.* TO '$DB_USERNAME'@'localhost'; 
-            FLUSH PRIVILEGES;"
-
-            /usr/bin/mysqldump -u root --password= $DB_NAME > "$BACKUP_FILE"
-            wait
-            /usr/bin/mysql -u root --password= $BACKUP_DB_NAME < "$BACKUP_FILE"
-            wait
-            echo "Backing up the database finished"
-
-            $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-            #sstsize=$(du -sck "$RESTORE_DIR"/*.sst | tail -n 1| cut -f1) 
-            #logsize=$(du -sck "$RESTORE_DIR"/*.log | tail -n 1| cut -f1)
-            cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
-            memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
-            extract_innodb_stats $BACKUP_DB_NAME
-            rm -rf $BACKUP_FILE
-            write_result "FALSE"
-
-            # Key Sizes
-            echo "Size computation started"
-            mysql -u root --password= -e " 
-            USE $BACKUP_DB_NAME; 
-            SELECT YCSB_KEY, 
-                    (LENGTHB(FIELD0) + LENGTHB(FIELD1) + LENGTHB(FIELD2) + LENGTHB(FIELD3) + 
-                    LENGTHB(FIELD4) + LENGTHB(FIELD5) + LENGTHB(FIELD6) + LENGTHB(FIELD7) + 
-                    LENGTHB(FIELD8) + LENGTHB(FIELD9)) AS Size FROM usertable;" | sed 's/\t/,/g' > $KEY_SIZE_LOG
-            
-            # Check if the output file exists, if not, create it with headers
-            iteration=$((10*($epoch-1)+$run))
-            if [[ ! -f "$KEY_SIZE_FILE" ]]; then
-                # Add header row (Key, Run1, Run2, ...)
-                echo "Key,Run$iteration" > "$KEY_SIZE_FILE"
-            fi
-
-            # If it's the first iteration, append keys and sizes for the first run
-            if [[ "$iteration" -eq 1 ]]; then
-                append_first_iteration
-            else
-                append_subsequent_iterations
-            fi
-
-            # Extract the recordcount from the workload file (assuming recordcount is in the form 'recordcount=1000')
-            recordcount=$(grep -E '^recordcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
-
-            # MySQL query to get the total size of all records
-            total_size=$(mysql -u root --password= -e "
-            USE $BACKUP_DB_NAME; 
-            SELECT SUM(
-                LENGTHB(FIELD0) + LENGTHB(FIELD1) + LENGTHB(FIELD2) + LENGTHB(FIELD3) + 
-                LENGTHB(FIELD4) + LENGTHB(FIELD5) + LENGTHB(FIELD6) + LENGTHB(FIELD7) + 
-                LENGTHB(FIELD8) + LENGTHB(FIELD9)
-            ) FROM usertable;" -s -N)
-
-            # Set average field length
-            fieldlengthaverage=$(echo "$total_size / (10 * $recordcount)" | bc)
-
-            echo "$total_size" "$fieldlengthaverage"
-
-            # Chainging the value size for comparison
-            perl -i -p -e "s/^fieldlength=.*/fieldlength=$fieldlengthaverage/" $WORKLOAD_FILE
-            source "$WORKLOAD_FILE"
-
-            mysql -u root --password= -e " 
-            USE $BACKUP_DB_NAME; 
-            DELETE FROM usertable;"
-
-            # Resetting the database with new data load
-            log "=== Executing the load phase for the comparison study ==="
-            $YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-            
-            # Chainging the value size for comparison
-            perl -i -p -e "s/^fieldlength=.*/fieldlength=$fieldlengthoriginal/" $WORKLOAD_FILE
-            source "$WORKLOAD_FILE"
-
-            # Step 6: Execute the run phase
-            log "=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ==="
-            phase="avg-run"
-            $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-            cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
-            memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
-            extract_innodb_stats $BACKUP_DB_NAME
-            write_result "FALSE"
-            fi
     done
 done
 
