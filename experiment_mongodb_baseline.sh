@@ -15,17 +15,17 @@ OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./analysis/Data/mongodb_exp_run2_spreadrun.csv"
+OUTPUT_FILE="./analysis/Data/mongodb_exp_run5_spreadrun.csv"
 
 # DB names
 DB_NAME="ycsb"
 
 # Key size gathering
 KEY_SIZE_LOG="key_sizes.csv"
-KEY_SIZE_FILE="./analysis/Data/key_size_dist_mongodb_run2_spreadrun.csv"
+KEY_SIZE_FILE="./analysis/Data/key_size_dist_mongodb_run5_spreadrun.csv"
 
 fieldlengthoriginal="100"
-operationcount="10000"
+extendoperationcount="10000"
 
 # Function to log and print messages
 log() {
@@ -140,7 +140,7 @@ for epoch in $(seq 1 10); do
         recordcount=$(grep -E '^recordcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
         
         # Compute the new record number to be added
-        updatedoperationcount=$(echo "($operationcount / 10)" | bc)
+        updatedoperationcount=$(echo "($extendoperationcount / 10)" | bc)
 
         # Change operation count for insert mode
         perl -i -p -e "s/^operationcount=.*/operationcount=$updatedoperationcount/" $WORKLOAD_FILE
@@ -152,7 +152,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^readproportion=.*/readproportion=1/" $WORKLOAD_FILE
 
         # Compute new record count
-        updatedrecordcount=$(echo "$recordcount + ($operationcount / 10)" | bc)
+        updatedrecordcount=$(echo "$recordcount + ($extendoperationcount / 10)" | bc)
 
         # Setting parameter values for read phase
         log "=== Setting parameter values for run phase ==="

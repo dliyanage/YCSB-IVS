@@ -30,7 +30,7 @@ KEY_SIZE_LOG="key_sizes.csv"
 KEY_SIZE_FILE="./analysis/Data/key_size_dist_rdb_run2_spreadrun_hwd.csv"
 
 fieldlengthoriginal="100"
-operationcount="100000"
+extendoperationcount="10000"
 
 # Create databases
 #mysql -u root --password= -e "
@@ -212,7 +212,7 @@ for epoch in $(seq 1 10); do
         recordcount=$(grep -E '^recordcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
         
         # Compute the new record number to be added
-        updatedoperationcount=$(echo "($operationcount / 10)" | bc)
+        updatedoperationcount=$(echo "($extendoperationcount / 10)" | bc)
 
         # Change operation count for insert mode
         perl -i -p -e "s/^operationcount=.*/operationcount=$updatedoperationcount/" $WORKLOAD_FILE
@@ -224,7 +224,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^readproportion=.*/readproportion=1/" $WORKLOAD_FILE
 
         # Compute new record count
-        updatedrecordcount=$(echo "$recordcount + ($operationcount / 10)" | bc)
+        updatedrecordcount=$(echo "$recordcount + ($extendoperationcount / 10)" | bc)
 
         # Setting parameter values for load phase
         log "=== Setting parameter values for run phase ==="

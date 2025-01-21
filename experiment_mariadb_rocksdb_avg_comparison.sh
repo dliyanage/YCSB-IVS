@@ -26,11 +26,11 @@ OUTPUT_CSV="./analysis/output.csv"
 
 # Define input and output filenames
 INPUT_FILE="./analysis/output.csv"
-OUTPUT_FILE="./analysis/Data/mariadb_exp_rdb_run2_zipfian_hwd.csv"
+OUTPUT_FILE="./analysis/Data/mariadb_exp_rdb_run1_new_uniform.csv"
 
 # Key size gathering
 KEY_SIZE_LOG="key_sizes.csv"
-KEY_SIZE_FILE="./analysis/Data/key_size_dist_rdb_run2_zipfian_hwd.csv"
+KEY_SIZE_FILE="./analysis/Data/key_size_dist_rdb_run1_new_uniform.csv"
 
 # Extend phase experiment parameters
 extendproportion_extend="1"
@@ -49,6 +49,7 @@ insertproportion_postextend="0"
 requestdistribution_postextend="uniform"
 
 fieldlengthoriginal="100"
+extendoperationcount="10000"
 
 # Create databases
 #mysql -u root --password= -e "
@@ -227,6 +228,10 @@ $YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB
 # Experiment parameters
 for epoch in $(seq 1 10); do
     for run in $(seq 1 10); do
+
+        # Record operation count from workload configuration file
+        opscount=$(grep -E '^operationcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
+        
         # Step 3: Setting parameter values for extend phase
         log "=== Setting parameter values for extend phase ==="
         perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_extend/" $WORKLOAD_FILE
@@ -235,6 +240,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^operationcount=.*/operationcount=$extendoperationcount/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 
         # Step 4: Execute the run phase
@@ -256,6 +262,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^operationcount=.*/operationcount=$opscount/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 
         # Execute the run phase
