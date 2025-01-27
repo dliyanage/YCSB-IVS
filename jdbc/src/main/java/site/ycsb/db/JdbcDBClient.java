@@ -276,6 +276,8 @@ public class JdbcDBClient extends DB {
       System.err.println("Error in closing the connection. " + e);
       throw new DBException(e);
     }
+
+    super.cleanup();
   }
 
   private PreparedStatement createAndCacheInsertStatement(StatementType insertType, String key)
