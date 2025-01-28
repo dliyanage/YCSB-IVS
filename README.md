@@ -41,14 +41,14 @@ cd YCSB-IVS
 
 ## Repository Structure  
 
-| Directory                  | Description                                                                 |
-|----------------------------|-----------------------------------------------------------------------------|
-| **`./experiment_scripts`** | Bash scripts for running workload experiments.                             |
-| **`./analysis/Data`**      | Output data files relevant for analysis. Refer to `./analysis/README.md`.  |
-| **`./Scripts`**            | Analysis scripts written in R (Jupyter notebooks).                         |
-| **`./Figures`**            | Generated output figures and visualizations referenced in our paper.       |  
+| Directory                  | Description                                                                        |
+|----------------------------|------------------------------------------------------------------------------------|
+| **`./experiment_scripts`** | Bash scripts for running workload experiments.                                     |
+| **`./analysis/Data`**      | Output data files relevant for analysis that are generated from our experiments by running bash scripts in `./experiment_scripts`. Refer to `./analysis/README.md`. |
+| **`./analysis/Scripts`**   | Analysis scripts written in R (Jupyter notebooks).                                 |
+| **`./analysis/Figures`**   | Generated output figures and visualizations referenced in our paper.               |  
 
-## Experimental Scripts  
+## Experimental Scripts 
 
 The `./experiment_scripts` directory contains all the necessary bash scripts for running workload experiments and saving the results as CSV files.  
 
@@ -68,7 +68,7 @@ To understand the analysis process and view results, refer to the [README.md](./
 
 ## Analysis Workflow  
 
-The R notebook located in the **`./Scripts`** folder includes:  
+The R Jupyter notebook located in the **`./analysis/Scripts`** folder includes:  
 - Step-by-step explanations of our analysis process.  
 - Intermediate results and final output figures.  
 
@@ -81,13 +81,13 @@ The R notebook located in the **`./Scripts`** folder includes:
    ```  
 
 2. **Explore the data**:  
-   Navigate to the `./Data` directory to view raw data files.  
+   Navigate to the `./analysis/Data` directory to view raw data files.  
 
 3. **Run the analysis**:  
-   Open the R notebook in the `./Scripts` folder to reproduce the analysis and figures.  
+   Open the R notebook in the `./analysis/Scripts` folder to reproduce the analysis and figures.  
 
 4. **View results**:  
-   Output figures are stored in the `./Figures` directory.  
+   Output figures are stored in the `./analysis/Figures` directory.  
 
 ## Citation  
 

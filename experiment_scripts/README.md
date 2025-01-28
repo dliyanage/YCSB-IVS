@@ -1,7 +1,3 @@
-```
-
-```
-
 ### Running Experiments using YCSB-IVS
 
 Before running any experiment, you need to configure the parameters in the bash scripts. The parameters cover database connection settings, workload configuration, output file paths, and specific experimental parameters (e.g., value size extension and workload distributions). Below are the key sections where you need to adjust the values:Database Configuration
@@ -62,7 +58,7 @@ KEY_SIZE_FILE="path/to/value_size_distribution.csv"
 
 #### Experiment Phase Parameters
 
-The experiment typically has two phases: the **value extension phase** and the  **post-extension phase** . Set the following parameters to control the distribution of operations in each phase, including the read, write, update, scan, and insert proportions.
+The experiment typically has two phases: the **value extension phase** and the  **workload-run phase** . Set the following parameters to control the distribution of operations in each phase, including the read, write, update, scan, and insert proportions.
 
 ##### Value Extension Phase:
 
@@ -76,7 +72,7 @@ insertproportion_extend="0"       # Proportion of insert operations
 requestdistribution_extend="uniform" # Request distribution type
 ```
 
-##### Post-Extension Phase:
+##### Workload-run Phase:
 
 ```bash
 # Define the proportions for the post-extension phase (operations after extension phase)
