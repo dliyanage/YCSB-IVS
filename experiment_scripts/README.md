@@ -1,10 +1,27 @@
-### Running Experiments using YCSB-IVS
+### Running Experiments with YCSB-IVS  
 
-Before running any experiment, you need to configure the parameters in the bash scripts. The parameters cover database connection settings, workload configuration, output file paths, and specific experimental parameters (e.g., value size extension and workload distributions). Below are the key sections where you need to adjust the values:Database Configuration
+This directory contains Bash scripts for running workloads and experiments while varying value sizes for the following databases:  
 
-Set the database connection settings, including the database name, user credentials, and JDBC connection URL. Adjust these based on the database you're using (e.g., MongoDB, MariaDB, etc.).
+- MongoDB  
+- MariaDB + InnoDB  
+- MariaDB + RocksDB  
+
+**Note:** If you need to run experiments on other databases supported by YCSB, you must create a new Bash script with configuration parameters and steps tailored to the chosen database.  
+
+#### Configuring Experiments  
+
+Before running an experiment, update the necessary parameters in the Bash scripts. These parameters define:  
+
+- Database connection settings  
+- Workload configuration  
+- Output file paths  
+- Experimental variables (e.g., value size extension, workload distributions)  
+
+Modify the relevant sections in the script to match your experiment's requirements.
 
 #### Database Related Configurations
+
+Set the database connection settings, including the database name, user credentials, and JDBC connection URL. Adjust these based on the database you're using (e.g., MongoDB, MariaDB, etc.).
 
 ```bash
 # Database names and configurations
