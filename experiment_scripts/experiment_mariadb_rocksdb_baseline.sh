@@ -25,6 +25,24 @@ OUTPUT_CSV="../analysis/output.csv"
 INPUT_FILE="../analysis/output.csv"
 OUTPUT_FILE="../analysis/Data/Baseline_data/rocksdb_run1_spreadrun_light.csv"
 
+# Extend phase experiment parameters
+extendproportion_extend="0"
+readproportion_extend="0"
+updateproportion_extend="0"
+scanproportion_extend="0"
+insertproportion_extend="1"
+readmodifywriteproportion_extend="0"
+requestdistribution_extend="uniform"
+
+# After extend phase experiment parameters
+extendproportion_postextend="0"
+readproportion_postextend="0.5"
+updateproportion_postextend="0.5"
+scanproportion_postextend="0"
+insertproportion_postextend="0"
+readmodifywriteproportion_postextend="0"
+requestdistribution_postextend="uniform"
+
 fieldlengthoriginal="100"
 extendoperationcount="10000"
 
@@ -177,9 +195,16 @@ write_result "TRUE"
 for epoch in $(seq 1 10); do
     for run in $(seq 1 10); do
 
-        # Set proportions for insert mode
-        perl -i -p -e "s/^insertproportion=.*/insertproportion=1/" $WORKLOAD_FILE
-        perl -i -p -e "s/^readproportion=.*/readproportion=0/" $WORKLOAD_FILE
+        # Setting parameter values for extend phase
+        log "=== Setting parameter values for extend phase ==="
+        perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readproportion=.*/readproportion=$readproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readmodifywriteproportion=.*/readmodifywriteproportion=$readmodifywriteproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_extend/" $WORKLOAD_FILE
+        source "$WORKLOAD_FILE"
 
         # Extract the recordcount and operationcount from the workload file
         operationcount=$(grep -E '^operationcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
@@ -193,9 +218,16 @@ for epoch in $(seq 1 10); do
 
         $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
 
-        # Set proportions for read mode
-        perl -i -p -e "s/^insertproportion=.*/insertproportion=0/" $WORKLOAD_FILE
-        perl -i -p -e "s/^readproportion=.*/readproportion=1/" $WORKLOAD_FILE
+        # Setting parameter values for run phase
+        log "=== Setting parameter values for run phase ==="
+        perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readproportion=.*/readproportion=$readproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readmodifywriteproportion=.*/readmodifywriteproportion=$readmodifywriteproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_postextend/" $WORKLOAD_FILE
+        source "$WORKLOAD_FILE"
 
         # Compute new record count
         updatedrecordcount=$(echo "$recordcount + ($extendoperationcount / 10)" | bc)

@@ -27,7 +27,9 @@ OUTPUT_FILE="../analysis/Data/Workload_data/innodb_run1_uniform_light.csv"
 
 # Key size gathering
 KEY_SIZE_LOG="key_sizes.csv"
-KEY_SIZE_FILE="../analysis/Data/Value_size_data/value_sizes_dist_innodb_run1_uniform_light.csv"
+KEY_SIZE_FILE_AFTER_EXTEND="../analysis/Data/Value_size_data/value_sizes_innodb_run1_uniform_light_before.csv"
+KEY_SIZE_FILE_AFTER_RUN="../analysis/Data/Value_size_data/value_sizes_innodb_run1_uniform_light_after.csv"
+HISTOGRAM_FILE="histogram.txt"
 
 # Extend phase experiment parameters
 extendproportion_extend="1"
@@ -152,25 +154,93 @@ close_db() {
 
 # Function to append values for the first iteration
 append_first_iteration() {
+    local key_size_log="$1"
+    local key_size_file="$2"
+
     echo "Appending first iteration..."
-    awk -F, 'NR==1 {next} {print $1 "," $2}' "$KEY_SIZE_LOG" >> "$KEY_SIZE_FILE"
-    echo "First iteration: Appended values from $KEY_SIZE_LOG to $KEY_SIZE_FILE"
+    awk -F, 'NR==1 {next} {print $1 "," $2}' "$key_size_log" >> "$key_size_file"
+    echo "First iteration: Appended values from $key_size_log to $key_size_file"
 }
 
 # Function to append sizes for subsequent iterations
 append_subsequent_iterations() {
+    local key_size_log="$1"
+    local key_size_file="$2"
+
     echo "Appending subsequent iteration $iteration..."
-    awk -F, '
+    awk -F, -v iter="$iteration" '
         NR==FNR {if (NR > 1) {key_sizes[$1]=$2;} next}  # Read key_sizes from log
-        FNR==1 {print $0 ",Run'$iteration'"; next}     # Add new run column in the header
+        FNR==1 {print $0 ",Run" iter; next}             # Add new run column in the header
         ($1 in key_sizes) {print $0 "," key_sizes[$1]}  # Append size for existing key
         !($1 in key_sizes) {print $0 ",0"}              # If key is not found, append 0
-    ' "$KEY_SIZE_LOG" "$KEY_SIZE_FILE" > temp.csv
+    ' "$key_size_log" "$key_size_file" > temp.csv
 
-    mv temp.csv "$KEY_SIZE_FILE"  # Overwrite the file with updated content
-    echo "Iteration $iteration: Appended new size values from $KEY_SIZE_LOG to $KEY_SIZE_FILE"
+    mv temp.csv "$key_size_file"  # Overwrite the file with updated content
+    echo "Iteration $iteration: Appended new size values from $key_size_log to $key_size_file"
 }
 
+get_key_sizes() {
+    local key_size_log="$1"
+    local histogram_file="$2"
+
+    echo "Generating histogram from key size log: $key_size_log"
+
+    awk -F, '
+        BEGIN {
+            block = 100
+            OFS = "\t"
+        }
+        NR == 1 { next }  # Skip header
+        {
+            size = $2 + 0
+            bucket = int(size / (block * 10 ))   #Converting value length to field length as there are 10 fields
+            histogram[bucket]++
+            if (bucket > max_bucket) max_bucket = bucket
+        }
+        END {
+            print "BlockSize", block > "'"$histogram_file"'"
+            for (i = 0; i <= max_bucket; i++) {
+                count = (i in histogram) ? histogram[i] : 0
+                print i, count >> "'"$histogram_file"'"
+            }
+        }
+    ' "$key_size_log"
+
+    echo "Histogram written to $histogram_file (BlockSize = 100)"
+}
+
+delete_new_keys() {
+  local db_name="$1"            # Required: name of the database
+  local user="${2:-root}"       # Optional: MySQL username (default: root)
+  local password="${3:-}"       # Optional: MySQL password (default: empty)
+  local table="${4:-usertable}" # Optional: table name (default: usertable)
+  local key_column="${5:-YCSB_KEY}" # Optional: primary key column (default: YCSB_KEY)
+
+  local file_before="keys.txt"
+  local file_after="keys_after_run.txt"
+  local file_to_delete="keys_to_delete.txt"
+
+  if [[ -z "$db_name" ]]; then
+    echo "Usage: delete_new_keys <db_name> [user] [password] [table] [key_column]"
+    return 1
+  fi
+
+  # Sort the key files
+  sort "$file_before" > keys_sorted.txt
+  sort "$file_after" > keys_after_sorted.txt
+
+  # Find keys that are only in keys_after_run.txt
+  comm -13 keys_sorted.txt keys_after_sorted.txt > "$file_to_delete"
+
+  echo "Deleting $(wc -l < "$file_to_delete") new keys from '$table' in database '$db_name'..."
+
+  # Run DELETE statements
+  while read -r key; do
+    echo "DELETE FROM $table WHERE $key_column='$key';"
+  done < "$file_to_delete" | mysql -u "$user" --password="$password" -D "$db_name"
+
+  echo "✅ Deletion complete."
+}
 
 # Global variables for storing InnoDB buffer pool statistics
 btree_height=""
@@ -416,8 +486,6 @@ log "=== Deleting the ycsb database on MongoDB, if any ==="
 log "=== Executing the load phase ==="
 phase="load"
 $YCSB load jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV 
-#sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1)
-#logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1)
 cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
 memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
 extract_innodb_stats $DB_NAME
@@ -433,60 +501,136 @@ for epoch in $(seq 1 10); do
         # Record operation count from workload configuration file
         opscount=$(grep -E '^operationcount=' "$WORKLOAD_FILE" | cut -d'=' -f2)
         
-        # Step 3: Setting parameter values for extend phase
+        # Setting parameter values for extend phase
         log "=== Setting parameter values for extend phase ==="
         perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^readproportion=.*/readproportion=$readproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readmodifywriteproportion=.*/readmodifywriteproportion=$readmodifywriteproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^operationcount=.*/operationcount=$extendoperationcount/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 
-        # Step 4: Execute the run phase
+        # Execute the run phase
         log "=== Executing the run phase with extendproportion=0.2 and other proportions=0 ==="
         phase="extend"
         $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        #sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1)
-        #logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1) 
         cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
         memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
         extract_innodb_stats $DB_NAME
         write_result "FALSE"
 
-        # Step 5: Setting parameter values for run phase
+        # Key Sizes
+        echo "Size computation started"
+        mysql -u root --password= -e " 
+        USE $DB_NAME; 
+        SELECT YCSB_KEY, 
+            (LENGTHB(FIELD0) + LENGTHB(FIELD1) + LENGTHB(FIELD2) + LENGTHB(FIELD3) + 
+            LENGTHB(FIELD4) + LENGTHB(FIELD5) + LENGTHB(FIELD6) + LENGTHB(FIELD7) + 
+            LENGTHB(FIELD8) + LENGTHB(FIELD9)) AS Size FROM usertable;" | sed 's/\t/,/g' > $KEY_SIZE_LOG
+
+        get_key_sizes $KEY_SIZE_LOG $HISTOGRAM_FILE
+
+        # Check if the output file exists, if not, create it with headers
+        iteration=$((10*($epoch-1)+$run))
+
+        if [$iteration -eq 5]; then
+            exit
+        fi
+
+        if [[ ! -f "$KEY_SIZE_FILE_AFTER_EXTEND" ]]; then
+            # Add header row (Key, Run1, Run2, ...)
+            echo "Key,Run$iteration" > "$KEY_SIZE_FILE_AFTER_EXTEND"
+        fi
+
+        # If it's the first iteration, append keys and sizes for the first run
+        if [[ "$iteration" -eq 1 ]]; then
+            append_first_iteration $KEY_SIZE_LOG $KEY_SIZE_FILE_AFTER_EXTEND
+        else
+            append_subsequent_iterations $KEY_SIZE_LOG $KEY_SIZE_FILE_AFTER_EXTEND
+        fi
+
+        # Setting parameter values for run phase
         log "=== Setting parameter values for run phase ==="
         perl -i -p -e "s/^extendproportion=.*/extendproportion=$extendproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^readproportion=.*/readproportion=$readproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^updateproportion=.*/updateproportion=$updateproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_postextend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^readmodifywriteproportion=.*/readmodifywriteproportion=$readmodifywriteproportion_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_postextend/" $WORKLOAD_FILE
         perl -i -p -e "s/^operationcount=.*/operationcount=$opscount/" $WORKLOAD_FILE
+        grep -q '^fieldlengthdistribution=' "$WORKLOAD_FILE" || echo -e "\nfieldlengthdistribution=histogram" >> "$WORKLOAD_FILE"
         source "$WORKLOAD_FILE"
+
+        # Save the existing keys in the database
+        mysql -u root --password= -e "
+        USE $DB_NAME;
+        SELECT YCSB_KEY FROM usertable;" | tail -n +2 > keys.txt
 
         # Execute the run phase
         log "=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ==="
         phase="run"
-        $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-        #sstsize=$(du -sck "$DB_PATH"/*.sst | tail -n 1| cut -f1) 
-        #logsize=$(du -sck "$DB_PATH"/*.log | tail -n 1| cut -f1)
+        $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" -p fieldlengthhistogram="$HISTOGRAM_FILE" > $OUTPUT_CSV
         cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
         memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
         extract_innodb_stats $DB_NAME
         write_result "FALSE"
+
+        # Save the existing keys in the database to remove duplicates later
+        mysql -u root --password= -e "
+        USE $DB_NAME;
+        SELECT YCSB_KEY FROM usertable;" | tail -n +2 > keys_after_run.txt
+
+        # Sort both files
+        sort keys.txt > keys_sorted.txt
+        sort keys_after_run.txt > keys_after_sorted.txt
+
+        # Get keys that are in keys_after_run.txt but NOT in keys.txt
+        comm -13 keys_sorted.txt keys_after_sorted.txt > keys_to_delete.txt
+
+        # Now delete those keys from MySQL
+        while read key; do
+          echo "DELETE FROM usertable WHERE YCSB_KEY='$key';"
+        done < keys_to_delete.txt | mysql -u root --password= -D "$DB_NAME"
+
+        rm -rf keys_after_run.txt keys.txt keys_after_sorted.txt keys_to_delete.txt
+
+        mysql -u root --password= -e "
+        USE $UNCHANGE_DB_NAME;
+        SELECT YCSB_KEY FROM usertable;" | tail -n +2 > keys.txt
 
         # Close the RocksDB database
         #close_db "$DB_PATH"
 
         # Workload with unchanging value sizes
         phase="reference"
-        $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
+        $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$UNCHANGE_DB_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" -p fieldlengthhistogram="$HISTOGRAM_FILE"  > $OUTPUT_CSV
         cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
         memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*")
         extract_innodb_stats $UNCHANGE_DB_NAME
         write_result "FALSE"
+
+        # Save the existing keys in the database to remove duplicates later
+        mysql -u root --password= -e "
+        USE $UNCHANGE_DB_NAME;
+        SELECT YCSB_KEY FROM usertable;" | tail -n +2 > keys_after_run.txt
+
+        # Sort both files
+        sort keys.txt > keys_sorted.txt
+        sort keys_after_run.txt > keys_after_sorted.txt
+
+        # Get keys that are in keys_after_run.txt but NOT in keys.txt
+        comm -13 keys_sorted.txt keys_after_sorted.txt > keys_to_delete.txt
+
+        # Now delete those keys from MySQL
+        while read key; do
+          echo "DELETE FROM usertable WHERE YCSB_KEY='$key';"
+        done < keys_to_delete.txt | mysql -u root --password= -D "$UNCHANGE_DB_NAME"
+
+        rm -rf keys_after_run.txt keys.txt keys_after_sorted.txt keys_to_delete.txt
     
         if (( $((10*($epoch-1)+$run)) % 1 == 0 )); then
             phase="clean-run"
@@ -504,14 +648,15 @@ for epoch in $(seq 1 10); do
             wait
             echo "Backing up the database finished"
 
-            $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
-            #sstsize=$(du -sck "$RESTORE_DIR"/*.sst | tail -n 1| cut -f1) 
-            #logsize=$(du -sck "$RESTORE_DIR"/*.log | tail -n 1| cut -f1)
+            $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" -p fieldlengthhistogram="$HISTOGRAM_FILE" > $OUTPUT_CSV
             cpu=$(ps -p $(pgrep -x mariadbd) -o %cpu | grep -o "[0-9.]*")
             memory=$(ps -p $(pgrep -x mariadbd) -o %mem | grep -o "[0-9.]*") 
             extract_innodb_stats $BACKUP_DB_NAME
             rm -rf $BACKUP_FILE
             write_result "FALSE"
+
+            # Revert and remove fieldlengthdistribution variable from workload file
+            awk '!/^fieldlengthdistribution=/' "$WORKLOAD_FILE" | awk 'NF || NR == 1' > tmp && mv tmp "$WORKLOAD_FILE"
 
             # Key Sizes
             echo "Size computation started"
@@ -524,16 +669,16 @@ for epoch in $(seq 1 10); do
             
             # Check if the output file exists, if not, create it with headers
             iteration=$((10*($epoch-1)+$run))
-            if [[ ! -f "$KEY_SIZE_FILE" ]]; then
+            if [[ ! -f "$KEY_SIZE_FILE_AFTER_RUN" ]]; then
                 # Add header row (Key, Run1, Run2, ...)
-                echo "Key,Run$iteration" > "$KEY_SIZE_FILE"
+                echo "Key,Run$iteration" > "$KEY_SIZE_FILE_AFTER_RUN"
             fi
 
             # If it's the first iteration, append keys and sizes for the first run
             if [[ "$iteration" -eq 1 ]]; then
-                append_first_iteration
+                append_first_iteration $KEY_SIZE_LOG $KEY_SIZE_FILE_AFTER_RUN
             else
-                append_subsequent_iterations
+                append_subsequent_iterations $KEY_SIZE_LOG $KEY_SIZE_FILE_AFTER_RUN
             fi
 
             # Extract the recordcount from the workload file (assuming recordcount is in the form 'recordcount=1000')
@@ -559,7 +704,7 @@ for epoch in $(seq 1 10); do
 
             mysql -u root --password= -e " 
             USE $BACKUP_DB_NAME; 
-            DELETE FROM usertable;"
+            TRUNCATE TABLE usertable;"
 
             # Resetting the database with new data load
             log "=== Executing the load phase for the comparison study ==="
@@ -569,7 +714,7 @@ for epoch in $(seq 1 10); do
             perl -i -p -e "s/^fieldlength=.*/fieldlength=$fieldlengthoriginal/" $WORKLOAD_FILE
             source "$WORKLOAD_FILE"
 
-            # Step 6: Execute the run phase
+            # Execute the run phase
             log "=== Executing the run phase with extendproportion=0 and read/update proportions=0.5 ==="
             phase="avg-run"
             $YCSB run jdbc -s -P $WORKLOAD_FILE -P $JDBC_PROPERTIES -p db.url="$BACKUP_URL" -p db.user="$DB_USERNAME" -p db.passwd="$DB_PWD" > $OUTPUT_CSV
