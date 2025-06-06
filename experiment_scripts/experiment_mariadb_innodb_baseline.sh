@@ -29,6 +29,7 @@ updateproportion_extend="0"
 scanproportion_extend="0"
 insertproportion_extend="1"
 readmodifywriteproportion_extend="0"
+requestdistribution_extend="uniform"
 
 # After extend phase experiment parameters
 extendproportion_postextend="0"
@@ -36,8 +37,8 @@ readproportion_postextend="0.5"
 updateproportion_postextend="0.5"
 scanproportion_postextend="0"
 insertproportion_postextend="0"
-extendvaluesize_postextend="0"
 readmodifywriteproportion_postextend="0"
+requestdistribution_postextend="uniform"
 
 fieldlengthoriginal="100"
 extendoperationcount="10000"
@@ -403,6 +404,7 @@ for epoch in $(seq 1 10); do
         perl -i -p -e "s/^scanproportion=.*/scanproportion=$scanproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^insertproportion=.*/insertproportion=$insertproportion_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^readmodifywriteproportion=.*/readmodifywriteproportion=$readmodifywriteproportion_extend/" $WORKLOAD_FILE
+        perl -i -p -e "s/^requestdistribution=.*/requestdistribution=$requestdistribution_extend/" $WORKLOAD_FILE
         perl -i -p -e "s/^operationcount=.*/operationcount=$extendoperationcount/" $WORKLOAD_FILE
         source "$WORKLOAD_FILE"
 

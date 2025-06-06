@@ -37,7 +37,8 @@ readproportion_extend="0"
 updateproportion_extend="0"
 scanproportion_extend="0"
 insertproportion_extend="0"
-requestdistribution_extend="uniform"
+readmodifywriteproportion_extend="0"
+requestdistribution_extend="zipfian"
 
 # After extend phase experiment parameters
 extendproportion_postextend="0"
@@ -45,6 +46,7 @@ readproportion_postextend="1"
 updateproportion_postextend="0"
 scanproportion_postextend="0"
 insertproportion_postextend="0"
+readmodifywriteproportion_postextend="0"
 requestdistribution_postextend="uniform"
 
 fieldlengthoriginal="100"

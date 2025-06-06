@@ -2,9 +2,9 @@
 
 This directory contains Bash scripts for running workloads and experiments while varying value sizes for the following databases:  
 
-- MongoDB  
-- MariaDB + InnoDB  
-- MariaDB + RocksDB  
+- MariaDB + RocksDB 
+- MariaDB + InnoDB
+- MongoDB 
 
 **Note:** If you need to run experiments on other databases supported by YCSB, you must create a new Bash script with configuration parameters and steps tailored to the chosen database.  
 
@@ -65,12 +65,14 @@ OUTPUT_FILE="path/to/output/csv_file"
 
 #### Key Size Gathering Configuration
 
-If you need to gather key sizes for analysis, configure the filenames for the key size logs and corresponding value size distribution files.
+We use the distribution of value sizes in the database as an input for running the workload. There must be a file to keep the histogram data. For the purpose of  analysing whether the value size distribution is preserved during the run phase, we record the value size of each key (in bytes) before and after the extend phase. Therefore, we configure the filenames for the key size logs and corresponding value size distribution files.
 
 ```bash
 # Key size gathering settings
 KEY_SIZE_LOG="path/to/key_size_log.csv"
-KEY_SIZE_FILE="path/to/value_size_distribution.csv"
+KEY_SIZE_FILE_AFTER_EXTEND="path/to/value_size_distribution_after_extend_phase.csv"
+KEY_SIZE_FILE_AFTER_RUN="path/to/value_size_distribution_after_run_phase.csv"
+HISTOGRAM_FILE="histogram.txt"
 ```
 
 #### Experiment Phase Parameters
@@ -81,24 +83,26 @@ The experiment typically has two phases: the **value extension phase** and the  
 
 ```bash
 # Define the proportions for the value extension phase
-extendproportion_extend="1"       # Set the proportion for value extension (0-1)
-readproportion_extend="0"         # Proportion of read operations
-updateproportion_extend="0"       # Proportion of update operations
-scanproportion_extend="0"         # Proportion of scan operations
-insertproportion_extend="0"       # Proportion of insert operations
-requestdistribution_extend="uniform" # Request distribution type
+extendproportion_extend="1"            # Set the proportion for value extension (0-1)
+readproportion_extend="0"              # Proportion of read operations
+updateproportion_extend="0"            # Proportion of update operations
+scanproportion_extend="0"              # Proportion of scan operations
+insertproportion_extend="0"            # Proportion of insert operations
+readmodifywriteproportion_extend="0"   # Proportion of read-modify-write operations
+requestdistribution_extend="uniform"   # Request distribution type
 ```
 
 ##### Workload-run Phase:
 
 ```bash
 # Define the proportions for the post-extension phase (operations after extension phase)
-extendproportion_postextend="0"   # Set the proportion for value extension
-readproportion_postextend="1"     # Proportion of read operations
-updateproportion_postextend="0"   # Proportion of update operations
-scanproportion_postextend="0"     # Proportion of scan operations
-insertproportion_postextend="0"   # Proportion of insert operations
-requestdistribution_postextend="uniform" # Request distribution
+extendproportion_postextend="0"              # Set the proportion for value extension
+readproportion_postextend="1"                # Proportion of read operations
+updateproportion_postextend="0"              # Proportion of update operations
+scanproportion_postextend="0"                # Proportion of scan operations
+insertproportion_postextend="0"              # Proportion of insert operations
+readmodifywriteproportion_postextend="0"     # Proportion of read-modify-write operations
+requestdistribution_postextend="uniform"     # Request distribution
 ```
 
 #### Experiment Specific Parameters
@@ -131,7 +135,7 @@ extendoperationcount="10000"       # Number of operations for the extension phas
 
 1. **View Output**
 
-   It is recommended to specify `OUTPUT_FILE` and `KEY_SIZE_FILE` parameter values such that outputs are saved at `../analysis/Data` directory.
+   It is recommended to specify `OUTPUT_FILE`, `KEY_SIZE_FILE_AFTER_EXTEND`, and `KEY_SIZE_FILE_AFTER_RUN` parameter values such that outputs are saved at `../analysis/Data` directory.
    If so, the experiment results will be saved in the `../analysis/Data` directory, with CSV files containing the collected data for further analysis.
 
 ### Analysis
